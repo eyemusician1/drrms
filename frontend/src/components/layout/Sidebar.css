@@ -1,0 +1,126 @@
+/* --- BASE SIDEBAR CONTAINER --- */
+.labs-sidebar {
+  width: 300px;
+  background: #000000;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  padding: 40px 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  align-self: flex-start;
+  /* Smooth, hardware-accelerated transition */
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-x: hidden;
+  white-space: nowrap; /* Prevents text from breaking lines while shrinking */
+  box-sizing: border-box;
+}
+
+/* --- COLLAPSED STATE --- */
+.labs-sidebar.collapsed {
+  width: 88px;
+}
+
+/* --- HEADER / BRAND ALIGNMENT --- */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 12px; /* Matches the 12px inner padding of the links below */
+  margin-bottom: 48px;
+  color: #ffffff;
+}
+
+.menu-toggle {
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  cursor: pointer;
+  padding: 0; /* Removing padding ensures the icon aligns to the pixel */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+}
+
+.menu-toggle:hover {
+  opacity: 0.7;
+}
+
+.menu-toggle .material-symbols-rounded {
+  font-size: 28px;
+}
+
+/* Brand text fading animation */
+.brand-text {
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+  transition: opacity 0.2s ease;
+}
+
+.labs-sidebar.collapsed .brand-text {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* --- NAVIGATION LINKS --- */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.sidebar-link, .logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  color: #a1a1aa;
+  text-decoration: none;
+  border-radius: 9999px; /* Pure Pill Shape */
+  font-weight: 500;
+  font-size: 1rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Active & Hover States */
+.sidebar-link.active {
+  background: #ffffff;
+  color: #000000;
+}
+
+.sidebar-link:hover:not(.active), .logout-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+/* --- ICON & TEXT ALIGNMENT --- */
+.sidebar-link .material-symbols-rounded, .logout-btn .material-symbols-rounded {
+  font-size: 28px;
+  width: 28px;
+  min-width: 28px; /* CRITICAL: Prevents icons from shrinking during animation */
+  text-align: center;
+}
+
+/* Link text fading animation */
+.link-label {
+  transition: opacity 0.2s ease;
+}
+
+.labs-sidebar.collapsed .link-label {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* --- FOOTER --- */
+.sidebar-footer {
+  margin-top: auto;
+}
