@@ -1,10 +1,13 @@
-from beanie import Document
-from typing import Optional, Literal
 from datetime import datetime
+from typing import Literal, Optional
+
+from beanie import Document
+from pydantic import EmailStr
+from pymongo import IndexModel
 
 class Officer(Document):
     full_name: str
-    email: str
+    email: EmailStr
     hashed_password: str
     role: Literal["Admin", "Officer"] = "Officer"
     is_active: bool = True
@@ -15,3 +18,6 @@ class Officer(Document):
 
     class Settings:
         name = "officers"
+        indexes = [
+            IndexModel([("email", 1)], unique=True),
+        ]

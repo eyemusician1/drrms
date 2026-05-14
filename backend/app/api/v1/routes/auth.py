@@ -3,7 +3,7 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from app.core.config import settings
 from app.core.dependencies import get_current_officer, get_current_officer_optional, oauth2_scheme
@@ -25,7 +25,7 @@ router = APIRouter()
 
 class RegisterRequest(BaseModel):
     full_name: str
-    email: str
+    email: EmailStr
     password: str
     role: Optional[Literal["Admin", "Officer"]] = None
 

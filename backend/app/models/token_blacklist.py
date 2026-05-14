@@ -1,5 +1,7 @@
-from beanie import Document
 from datetime import datetime
+
+from beanie import Document
+from pymongo import IndexModel
 
 class TokenBlacklist(Document):
     token: str
@@ -8,3 +10,6 @@ class TokenBlacklist(Document):
 
     class Settings:
         name = "token_blacklist"
+        indexes = [
+            IndexModel([("expires_at", 1)], expireAfterSeconds=0),
+        ]

@@ -1,6 +1,8 @@
-from pydantic_settings import BaseSettings
-from pydantic import field_validator
+import json
 from typing import List
+
+from pydantic import field_validator
+from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     MONGO_URI: str
@@ -22,6 +24,26 @@ class Settings(BaseSettings):
     def jwt_secret_must_be_strong(cls, v: str) -> str:
         if len(v) < 32:
             raise ValueError("JWT_SECRET must be at least 32 characters")
+        return v
+
+    @field_validator("ALLOWED_ORIGINS", mode="before")
+    @classmethod
+    def parse_allowed_origins(cls, v):
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            raw = v.strip()
+            if not raw:
+                return []
+            if raw.startswith("["):
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError as exc:
+                    raise ValueError("ALLOWED_ORIGINS must be a JSON array or comma-separated list") from exc
+                if not isinstance(parsed, list):
+                    raise ValueError("ALLOWED_ORIGINS must be a JSON array or comma-separated list")
+                return parsed
+            return [origin.strip() for origin in raw.split(",") if origin.strip()]
         return v
 
     @property
