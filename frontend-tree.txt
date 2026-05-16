@@ -1,0 +1,65 @@
++---public
+|   |   favicon.svg
+|   |   icons.svg
++---src
+|   +---assets
+|   |   |   hero.png
+|   |   |   react.svg
+|   |   |   vite.svg
+|   +---components
+|   |   +---forms
+|   |   |   |   AreaForm.jsx
+|   |   |   |   DisasterForm.jsx
+|   |   |   |   EvacuationForm.jsx
+|   |   |   |   ReliefForm.jsx
+|   |   |   |   TeamForm.jsx
+|   |   |   |   WarningForm.jsx
+|   |   +---layout
+|   |   |   |   Navbar.jsx
+|   |   |   |   ProtectedRoute.jsx
+|   |   |   |   Sidebar.jsx
+|   |   +---ui
+|   |   |   |   Badge.jsx
+|   |   |   |   EmptyState.jsx
+|   |   |   |   Modal.jsx
+|   |   |   |   Spinner.jsx
+|   |   |   |   StatCard.jsx
+|   |   |   |   Table.jsx
+|   +---hooks
+|   |   |   useApi.js
+|   |   |   useAuth.js
+|   +---pages
+|   |   +---auth
+|   |   |   |   Login.jsx
+|   |   +---manage
+|   |   |   |   ManageAreas.jsx
+|   |   |   |   ManageDistasters.jsx
+|   |   |   |   ManageEvacuation.jsx
+|   |   |   |   ManageOfficers.jsx
+|   |   |   |   ManageRelief.jsx
+|   |   |   |   ManageTeams.jsx
+|   |   |   |   ManageWarnings.jsx
+|   |   +---public
+|   |   |   |   Dashboard.jsx
+|   |   |   |   DisasterDetail.jsx
+|   |   |   |   Disasters.jsx
+|   |   |   |   Evacuation.jsx
+|   |   |   |   Reports.jsx
+|   |   |   |   Teams.jsx
+|   |   |   |   Warnings.jsx
+|   +---services
+|   |   |   api.js
+|   +---utils
+|   |   |   auth.js
+|   |   |   formatters.js
+|   |   App.css
+|   |   App.jsx
+|   |   index.css
+|   |   main.jsx
+|   .gitignore
+|   eslint.config.js
+|   index.html
+|   package.json
+|   package-lock.json
+|   README.md
+|   vite.config.js

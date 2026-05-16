@@ -11,6 +11,7 @@ import ManageDisasters from './pages/manage/ManageDistasters'; // Make sure this
 import ManageTeams from './pages/manage/ManageTeams';
 import ManageRelief from './pages/manage/ManageRelief';
 import ManageEvacuation from './pages/manage/ManageEvacuation';
+import './pages/manage/ManagePages.css';
 
 // Layout wrapper to keep the Sidebar consistent
 const AdminLayout = () => (

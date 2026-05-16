@@ -1,0 +1,284 @@
+/* --- GLOBAL BOX SIZING FIX --- */
+.labs-modal-container *,
+.labs-modal-container *::before,
+.labs-modal-container *::after {
+  box-sizing: border-box;
+}
+
+/* --- OVERLAY & ANIMATION --- */
+.labs-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: modalFadeIn 0.15s ease-out forwards;
+}
+
+/* --- THE MODAL BOX --- */
+.labs-modal-container {
+  background: #111114;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 28px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 40px rgba(0, 0, 0, 0.4);
+  animation: modalSlideUp 0.2s cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+.labs-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px 16px;
+  flex-shrink: 0;
+}
+
+.labs-modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 400;
+  color: #E3E3E3;
+  letter-spacing: -0.5px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #C4C7C5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 50%;
+  transition: background 0.2s, color 0.2s;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+/* --- SCROLLABLE BODY --- */
+.labs-modal-body {
+  padding: 16px 32px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.labs-modal-body::-webkit-scrollbar { width: 6px; }
+.labs-modal-body::-webkit-scrollbar-track { background: transparent; }
+.labs-modal-body::-webkit-scrollbar-thumb { background: #444746; border-radius: 10px; }
+.labs-modal-body::-webkit-scrollbar-thumb:hover { background: #8E918F; }
+
+/* --- FOOTER --- */
+.labs-modal-footer {
+  padding: 24px 32px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* --- LABS FORM ELEMENTS --- */
+.labs-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.labs-form-group label {
+  color: #C4C7C5;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.labs-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid #444746;
+  color: #E3E3E3;
+  padding: 16px 20px;
+  border-radius: 12px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  outline: none;
+}
+
+.labs-input:focus {
+  border-color: #A8C7FA;
+  background: rgba(168, 199, 250, 0.04);
+  box-shadow: inset 0 0 0 1px #A8C7FA;
+}
+
+.labs-input.is-invalid,
+.labs-dropdown-trigger.is-invalid {
+  border-color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.6);
+}
+
+.labs-input.is-invalid:focus,
+.labs-dropdown-trigger.is-invalid.active {
+  border-color: #ef4444;
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.7);
+}
+
+.labs-input::placeholder {
+  color: #8E918F;
+}
+
+/* --- THE CUSTOM DROPDOWN SYSTEM --- */
+.labs-dropdown-trigger {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.labs-dropdown-trigger.active {
+  border-color: #A8C7FA;
+  box-shadow: inset 0 0 0 1px #A8C7FA;
+  background: rgba(168, 199, 250, 0.04);
+}
+
+.labs-dropdown-trigger .chevron {
+  color: #C4C7C5;
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), color 0.2s;
+}
+
+.labs-dropdown-trigger.active .chevron {
+  color: #A8C7FA;
+  transform: rotate(180deg);
+}
+
+/* Because of React Portal, this menu floats independently! */
+.labs-dropdown-menu {
+  position: fixed; /* Locked to the viewport */
+  background: #1E1E20;
+  border: 1px solid #444746;
+  border-radius: 16px;
+  padding: 8px 0;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  z-index: 9999; /* Supreme override */
+  max-height: 240px;
+  overflow-y: auto;
+  animation: dropdownFade 0.15s cubic-bezier(0.2, 0, 0, 1) forwards;
+  transform-origin: top center;
+}
+
+.labs-dropdown-menu::-webkit-scrollbar { width: 4px; }
+.labs-dropdown-menu::-webkit-scrollbar-thumb { background: #444746; border-radius: 4px; }
+
+/* The Items inside the Menu */
+.labs-dropdown-item {
+  padding: 12px 16px;
+  margin: 0 8px; /* Creates the floating pill look inside the menu */
+  border-radius: 8px;
+  color: #E3E3E3;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 0.95rem;
+}
+
+.labs-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.labs-dropdown-item.selected {
+  background: rgba(168, 199, 250, 0.16);
+  color: #A8C7FA;
+  font-weight: 500;
+}
+
+/* --- BUTTONS (STRICTLY MOTIONLESS) --- */
+.labs-btn-large {
+  background: #E3E3E3;
+  color: #111114;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 100px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Only transition background and shadow. No transform. */
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  transform: none !important;
+}
+
+/* Subtle Hover: Soft glow and brighter surface */
+.labs-btn-large:hover {
+  background: #FFFFFF;
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.15);
+  transform: none !important;
+}
+
+/* Subtle Click: Slightly darkens instead of physically pressing down */
+.labs-btn-large:active {
+  background: #C4C7C5;
+  box-shadow: none;
+  transform: none !important;
+}
+
+.labs-btn-ghost {
+  background: transparent;
+  color: #C4C7C5;
+  border: 1px solid #444746;
+  padding: 10px 24px;
+  border-radius: 100px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  /* Only transition colors */
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  transform: none !important;
+}
+
+/* Subtle Hover: Light frosted glass fill */
+.labs-btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #E3E3E3;
+  border-color: #8E918F;
+  transform: none !important;
+}
+
+/* Subtle Click: Slightly denser frosted glass */
+.labs-btn-ghost:active {
+  background: rgba(255, 255, 255, 0.1);
+  transform: none !important;
+}
+/* --- KEYFRAMES --- */
+@keyframes modalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalSlideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dropdownFade {
+  from { opacity: 0; transform: scaleY(0.95); }
+  to { opacity: 1; transform: scaleY(1); }
+}
