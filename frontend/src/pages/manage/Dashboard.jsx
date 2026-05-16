@@ -32,8 +32,8 @@ const Dashboard = () => {
     setToasts((prev) => [...prev, { id, message }]);
   };
 
-  const removeToast = (id) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  const clearToasts = () => {
+    setToasts([]);
   };
 
   const sanitizeText = (value) => value.replace(/[<>]/g, '').trim();
@@ -180,7 +180,7 @@ const Dashboard = () => {
         </div>
       </Modal>
 
-      <Toast toasts={toasts} onClose={removeToast} />
+      <Toast toasts={toasts} onCloseAll={clearToasts} />
     </div>
   );
 };

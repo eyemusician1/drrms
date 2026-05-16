@@ -36,11 +36,19 @@
   margin: 0;
 }
 
-.slide-up-fade {
-  animation: toastEnter 0.3s cubic-bezier(0.2, 0, 0, 1) forwards;
+.toast-life {
+  animation:
+    toastEnter 0.3s cubic-bezier(0.2, 0, 0, 1) forwards,
+    toastExit 0.3s cubic-bezier(0.2, 0, 0, 1) forwards;
+  animation-delay: 0s, 3.2s;
 }
 
 @keyframes toastEnter {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toastExit {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(10px); }
 }
