@@ -11,21 +11,41 @@ const Login = () => {
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
+  e.preventDefault();
+  setIsLoading(true);
+  setError('');
 
-    try {
-      // Logic for your FastAPI backend goes here
-      setTimeout(() => {
-        setIsLoading(false);
-        navigate('/manage/dashboard');
-      }, 1500);
-    } catch (err) {
-      setError('Invalid credentials.');
-      setIsLoading(false);
+  try {
+    // Login expects form data, NOT JSON — this is OAuth2 standard
+    const formData = new URLSearchParams();
+    formData.append('username', email);   // backend uses 'username' field
+    formData.append('password', password);
+
+    const response = await fetch('http://127.0.0.1:8000/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setError(data.detail || 'Login failed.');
+      return;
     }
-  };
+
+    // Store the tokens
+    localStorage.setItem('access_token', data.access_token);
+    localStorage.setItem('refresh_token', data.refresh_token);
+    localStorage.setItem('role', data.role);
+
+    navigate('/manage/dashboard');
+  } catch (err) {
+    setError('Could not connect to server. Is the backend running?');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="login-container">
