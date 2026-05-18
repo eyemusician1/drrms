@@ -167,6 +167,7 @@ const Dashboard = () => {
     type: warning.warning_type || 'Alert',
     region: warning.region || 'Unknown',
     disaster: warning.disaster_type || 'Unknown',
+    label: warning.warning_type || 'Alert',
     raw: warning,
   }));
 
@@ -218,7 +219,7 @@ const Dashboard = () => {
                   recentAlerts.map((alert) => (
                     <div className="incident-row" key={alert.id}>
                       <div className="incident-row-header">
-                        <span className="mono-label">{alert.id}</span>
+                        <span className="mono-label">{alert.label}</span>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <span className="alert-badge">{alert.disaster}</span>
                           <button
@@ -254,7 +255,7 @@ const Dashboard = () => {
               {recentEvents.map(event => (
                 <div className={`incident-row severity-${event.severity.toLowerCase()}`} key={event.id}>
                   <div className="incident-row-header">
-                    <span className="mono-label">{event.id}</span>
+                    <span className="mono-label">{event.type}</span>
                     <span className="severity-badge">{event.severity}</span>
                   </div>
                   <div className="incident-type">{event.type}</div>
@@ -273,7 +274,7 @@ const Dashboard = () => {
               <div key={`map-${event.id}`} className={`map-blip severity-${event.severity.toLowerCase()}`} style={{ left: `${event.x}%`, top: `${event.y}%` }}>
                 <div className="blip-core"></div>
                 <div className="blip-ring"></div>
-                <div className="blip-label">{event.id}</div>
+                <div className="blip-label">{event.type}</div>
               </div>
             ))}
           </div>
@@ -359,7 +360,7 @@ const Dashboard = () => {
         <div className="delete-modal-message">
           This alert will be permanently removed from the feed.
           <div className="delete-modal-meta">
-            {deleteTarget?.warning_type || deleteTarget?.id || deleteTarget?._id || 'Selected alert'}
+            {deleteTarget?.warning_type || deleteTarget?.region || 'Selected alert'}
           </div>
         </div>
       </Modal>

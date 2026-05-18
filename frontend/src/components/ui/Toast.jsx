@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import './Toast.css';
 
 const toastIcon = (type) => {
@@ -38,7 +39,7 @@ const Toast = ({ message, isVisible, onCloseAll, toasts, duration = 3500 }) => {
 
   if (!items.length) return null;
 
-  return (
+  return createPortal(
     <div className="labs-toast-container">
       <div className="labs-toast-stack">
         {items.map((toast) => (
@@ -49,7 +50,8 @@ const Toast = ({ message, isVisible, onCloseAll, toasts, duration = 3500 }) => {
           />
         ))}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

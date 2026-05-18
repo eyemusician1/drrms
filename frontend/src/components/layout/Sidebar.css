@@ -124,3 +124,59 @@
 .sidebar-footer {
   margin-top: auto;
 }
+
+@media (max-width: 900px) {
+  .labs-sidebar {
+    width: 230px;
+    height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 30;
+    padding: 24px 12px;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: none;
+    transform: none;
+    box-shadow: 12px 0 30px rgba(0, 0, 0, 0.4);
+  }
+
+  .labs-sidebar.collapsed {
+    width: 72px;
+    transform: none;
+  }
+
+  .sidebar-brand {
+    margin-bottom: 20px;
+  }
+
+  .sidebar-nav {
+    flex-direction: column;
+    overflow-x: hidden;
+    gap: 8px;
+    padding-bottom: 0;
+  }
+
+  .sidebar-nav::-webkit-scrollbar { height: 4px; }
+  .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 10px; }
+
+  .sidebar-link, .logout-btn {
+    width: 100%;
+    padding: 10px;
+    font-size: 0.9rem;
+  }
+
+  .sidebar-link .material-symbols-rounded, .logout-btn .material-symbols-rounded {
+    font-size: 22px;
+    width: 22px;
+    min-width: 22px;
+  }
+
+  .menu-toggle .material-symbols-rounded {
+    font-size: 22px;
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+  }
+}

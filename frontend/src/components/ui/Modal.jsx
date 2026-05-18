@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import './Modal.css';
 
 const Modal = ({ isOpen, onClose, title, children, actionText = "Submit", onAction }) => {
@@ -11,7 +12,7 @@ const Modal = ({ isOpen, onClose, title, children, actionText = "Submit", onActi
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="labs-modal-overlay" onClick={onClose}>
       <div className="labs-modal-container" onClick={(e) => e.stopPropagation()}>
 
@@ -32,7 +33,8 @@ const Modal = ({ isOpen, onClose, title, children, actionText = "Submit", onActi
         </footer>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -190,7 +190,7 @@ const ManageEvacuation = () => {
                   <div className="card-header-flex" style={{ marginBottom: '40px' }}>
                     <h3 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 400, color: '#fff' }}>{shelter.name}</h3>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <span className="mono-label" style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', borderRadius: '99px' }}>{shelter.id}</span>
+                      <span className="mono-label" style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', borderRadius: '99px' }}>Safe Haven</span>
                       <button
                         className="edit-icon-btn"
                         title="Edit center"
@@ -338,7 +338,7 @@ const ManageEvacuation = () => {
         <div className="delete-modal-message">
           This evacuation center will be permanently removed.
           <div className="delete-modal-meta">
-            {deleteTarget?.name || deleteTarget?.id || deleteTarget?._id || 'Selected center'}
+            {deleteTarget?.name || deleteTarget?.location || 'Selected center'}
           </div>
         </div>
       </Modal>
