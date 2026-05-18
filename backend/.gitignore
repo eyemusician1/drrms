@@ -9,3 +9,10 @@ venv/
 .mypy_cache/
 logs/
 *.log
+
+# Local environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
