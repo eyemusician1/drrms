@@ -12,6 +12,7 @@ from app.api.v1.routes import (
     evacuation,
     relief,
     reports,
+    stream,
     teams,
     warnings,
 )
@@ -22,6 +23,7 @@ from app.core.rate_limiter import limiter
 from app.middleware.request_logger import RequestLoggerMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting DRRMS API...")
@@ -29,6 +31,7 @@ async def lifespan(app: FastAPI):
     logger.info("DRRMS API ready.")
     yield
     logger.info("DRRMS API shutting down.")
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -54,14 +57,20 @@ app.add_middleware(
     expose_headers=["X-Total-Count"],
 )
 
-app.include_router(auth.router,           prefix="/api/v1/auth",          tags=["Auth"])
-app.include_router(disasters.router,      prefix="/api/v1/disasters",     tags=["Disasters"])
-app.include_router(affected_areas.router, prefix="/api/v1/affected-areas",tags=["Affected Areas"])
-app.include_router(teams.router,          prefix="/api/v1/teams",         tags=["Response Teams"])
-app.include_router(evacuation.router,     prefix="/api/v1/evacuation",    tags=["Evacuation Centers"])
-app.include_router(relief.router,         prefix="/api/v1/relief",        tags=["Relief Operations"])
-app.include_router(warnings.router,       prefix="/api/v1/warnings",      tags=["Early Warnings"])
-app.include_router(reports.router,        prefix="/api/v1/reports",       tags=["Reports"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
+app.include_router(disasters.router, prefix="/api/v1/disasters", tags=["Disasters"])
+app.include_router(
+    affected_areas.router, prefix="/api/v1/affected-areas", tags=["Affected Areas"]
+)
+app.include_router(teams.router, prefix="/api/v1/teams", tags=["Response Teams"])
+app.include_router(
+    evacuation.router, prefix="/api/v1/evacuation", tags=["Evacuation Centers"]
+)
+app.include_router(relief.router, prefix="/api/v1/relief", tags=["Relief Operations"])
+app.include_router(warnings.router, prefix="/api/v1/warnings", tags=["Early Warnings"])
+app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+app.include_router(stream.router, prefix="/api/v1/stream", tags=["Realtime"])
+
 
 @app.get("/health", tags=["Health"])
 async def health():
@@ -69,5 +78,5 @@ async def health():
         "status": "ok",
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "environment": settings.APP_ENV
+        "environment": settings.APP_ENV,
     }

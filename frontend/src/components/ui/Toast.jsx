@@ -1,29 +1,40 @@
 import React, { useEffect } from 'react';
 import './Toast.css';
 
-const ToastItem = ({ message, onClose, duration = 3500 }) => {
-  useEffect(() => {
-    if (!onClose) return undefined;
-    const timer = setTimeout(() => {
-      onClose();
-    }, duration);
-    return () => clearTimeout(timer);
-  }, [onClose, duration]);
-
-  return (
-    <div className="labs-toast slide-up-fade">
-      <span className="material-symbols-rounded" style={{ color: '#A8C7FA' }}>
-        check_circle
-      </span>
-      <p>{message}</p>
-    </div>
-  );
+const toastIcon = (type) => {
+  switch (type) {
+    case 'success':
+      return 'check_circle';
+    case 'error':
+      return 'error';
+    case 'warning':
+      return 'warning';
+    default:
+      return 'info';
+  }
 };
 
-const Toast = ({ message, isVisible, onClose, toasts }) => {
+const ToastItem = ({ message, type }) => (
+  <div className={`labs-toast toast-life toast-${type || 'info'}`}>
+    <span className="material-symbols-rounded toast-icon">
+      {toastIcon(type)}
+    </span>
+    <p>{message}</p>
+  </div>
+);
+
+const Toast = ({ message, isVisible, onCloseAll, toasts, duration = 3500 }) => {
   const items = Array.isArray(toasts)
     ? toasts
     : (isVisible && message ? [{ id: 'single', message }] : []);
+
+  useEffect(() => {
+    if (!items.length || !onCloseAll) return undefined;
+    const timer = setTimeout(() => {
+      onCloseAll();
+    }, duration);
+    return () => clearTimeout(timer);
+  }, [items.length, onCloseAll, duration]);
 
   if (!items.length) return null;
 
@@ -34,7 +45,7 @@ const Toast = ({ message, isVisible, onClose, toasts }) => {
           <ToastItem
             key={toast.id || toast.message}
             message={toast.message}
-            onClose={onClose ? () => onClose(toast.id) : undefined}
+            type={toast.type || 'info'}
           />
         ))}
       </div>

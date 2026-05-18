@@ -7,6 +7,10 @@ const LabsDropdown = ({ options, value, onChange, placeholder, hasError }) => {
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
   const [menuStyle, setMenuStyle] = useState({});
+  const normalizedOptions = (options || []).map((opt) => (
+    typeof opt === 'string' ? { label: opt, value: opt } : opt
+  ));
+  const selectedOption = normalizedOptions.find((opt) => opt.value === value);
 
   useEffect(() => {
     // Close if clicked outside the trigger or the menu
@@ -55,8 +59,8 @@ const LabsDropdown = ({ options, value, onChange, placeholder, hasError }) => {
         className={`labs-input labs-dropdown-trigger ${isOpen ? 'active' : ''} ${hasError ? 'is-invalid' : ''}`}
         onClick={toggleMenu}
       >
-        <span style={{ color: value ? '#E3E3E3' : '#8E918F' }}>
-          {value || placeholder}
+        <span style={{ color: (selectedOption || value) ? '#E3E3E3' : '#8E918F' }}>
+          {selectedOption ? selectedOption.label : (value || placeholder)}
         </span>
         <span className={`material-symbols-rounded chevron ${isOpen ? 'open' : ''}`}>
           expand_more
@@ -66,16 +70,16 @@ const LabsDropdown = ({ options, value, onChange, placeholder, hasError }) => {
       {/* React Portal renders the menu directly to the body, escaping all overflow restrictions! */}
       {isOpen && createPortal(
         <div className="labs-dropdown-menu" style={menuStyle} ref={menuRef}>
-          {options.map((opt) => (
+          {normalizedOptions.map((opt) => (
             <div
-              key={opt}
-              className={`labs-dropdown-item ${value === opt ? 'selected' : ''}`}
+              key={opt.value}
+              className={`labs-dropdown-item ${value === opt.value ? 'selected' : ''}`}
               onClick={() => {
-                onChange(opt);
+                onChange(opt.value);
                 setIsOpen(false);
               }}
             >
-              {opt}
+              {opt.label}
             </div>
           ))}
         </div>,

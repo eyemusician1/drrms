@@ -4,6 +4,7 @@ from typing import List
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
+
 class Settings(BaseSettings):
     MONGO_URI: str
     DB_NAME: str = "drrms_db"
@@ -18,6 +19,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 100
     AUTH_RATE_LIMIT_PER_MINUTE: int = 10
     SECURE_HEADERS: bool = True
+    ADMIN_EMAIL: str = "admin@cics.com"
+    ADMIN_PASSWORD: str = "itd110admin"
+    ADMIN_FULL_NAME: str = "System Admin"
 
     @field_validator("JWT_SECRET")
     @classmethod
@@ -39,9 +43,13 @@ class Settings(BaseSettings):
                 try:
                     parsed = json.loads(raw)
                 except json.JSONDecodeError as exc:
-                    raise ValueError("ALLOWED_ORIGINS must be a JSON array or comma-separated list") from exc
+                    raise ValueError(
+                        "ALLOWED_ORIGINS must be a JSON array or comma-separated list"
+                    ) from exc
                 if not isinstance(parsed, list):
-                    raise ValueError("ALLOWED_ORIGINS must be a JSON array or comma-separated list")
+                    raise ValueError(
+                        "ALLOWED_ORIGINS must be a JSON array or comma-separated list"
+                    )
                 return parsed
             return [origin.strip() for origin in raw.split(",") if origin.strip()]
         return v
@@ -53,5 +61,6 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+
 
 settings = Settings()

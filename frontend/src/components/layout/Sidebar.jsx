@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import './Sidebar.css';
 
 const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const links = [
     { name: 'Overview', icon: 'grid_view', path: '/manage/dashboard' },
@@ -41,7 +44,14 @@ const Sidebar = () => {
       </nav>
 
       <div className="sidebar-footer">
-        <button className="logout-btn" title={isCollapsed ? "Logout" : ""}>
+        <button
+          className="logout-btn"
+          title={isCollapsed ? "Logout" : ""}
+          onClick={async () => {
+            await logout();
+            navigate('/');
+          }}
+        >
           <span className="material-symbols-rounded">logout</span>
           {!isCollapsed && <span className="link-label">Logout</span>}
         </button>
