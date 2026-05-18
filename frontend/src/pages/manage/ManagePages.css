@@ -75,6 +75,59 @@
 .inventory-row:hover { background: rgba(255, 255, 255, 0.04); }
 .inventory-row:last-child { border-bottom: none; }
 
+.edit-icon-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #a1a1aa;
+  padding: 6px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.edit-icon-btn:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.delete-icon-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #a1a1aa;
+  padding: 6px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.delete-icon-btn:hover {
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.labs-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+
+.delete-modal-message {
+  color: #c4c7c5;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.delete-modal-meta {
+  margin-top: 8px;
+  color: #8e918f;
+  font-size: 0.85rem;
+}
+
 .bar-container {
   width: 100%;
   height: 8px;
@@ -132,4 +185,10 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
   gap: 32px;
+}
+
+@media (max-width: 720px) {
+  .labs-form-grid {
+    grid-template-columns: 1fr;
+  }
 }

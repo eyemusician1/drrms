@@ -1,10 +1,23 @@
 import React, { useEffect } from 'react';
 import './Toast.css';
 
-const ToastItem = ({ message }) => (
-  <div className="labs-toast toast-life">
-    <span className="material-symbols-rounded" style={{ color: '#A8C7FA' }}>
-      check_circle
+const toastIcon = (type) => {
+  switch (type) {
+    case 'success':
+      return 'check_circle';
+    case 'error':
+      return 'error';
+    case 'warning':
+      return 'warning';
+    default:
+      return 'info';
+  }
+};
+
+const ToastItem = ({ message, type }) => (
+  <div className={`labs-toast toast-life toast-${type || 'info'}`}>
+    <span className="material-symbols-rounded toast-icon">
+      {toastIcon(type)}
     </span>
     <p>{message}</p>
   </div>
@@ -29,7 +42,11 @@ const Toast = ({ message, isVisible, onCloseAll, toasts, duration = 3500 }) => {
     <div className="labs-toast-container">
       <div className="labs-toast-stack">
         {items.map((toast) => (
-          <ToastItem key={toast.id || toast.message} message={toast.message} />
+          <ToastItem
+            key={toast.id || toast.message}
+            message={toast.message}
+            type={toast.type || 'info'}
+          />
         ))}
       </div>
     </div>

@@ -1,48 +1,77 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
 import Toast from '../../components/ui/Toast';
+import { useRealtimeStream } from '../../hooks/useRealtimeStream';
+import { useApi } from '../../hooks/useApi';
 import './ManagePages.css';
 
 const ManageTeams = () => {
   const [isTeamModalOpen, setTeamModalOpen] = useState(false);
   const [unitName, setUnitName] = useState('');
-  const [teamLead, setTeamLead] = useState('');
+  const [contact, setContact] = useState('');
+  const [teamType, setTeamType] = useState('');
   const [specialization, setSpecialization] = useState('');
-  const [readiness, setReadiness] = useState('');
+  const [assignedEventId, setAssignedEventId] = useState('');
+  const [operationZone, setOperationZone] = useState('');
   const [errors, setErrors] = useState({});
   const [toasts, setToasts] = useState([]);
+  const { request } = useApi();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingTeamId, setEditingTeamId] = useState('');
+  const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const [teams, setTeams] = useState([
-    { id: 'RT-201', name: 'Alpha Response', lead: 'Cpt. Reyes', readiness: 'High', status: 'Deployed' },
-    { id: 'RT-212', name: 'Medical Support', lead: 'Dr. Ramos', readiness: 'High', status: 'Deployed' },
-    { id: 'RT-204', name: 'Coastal Unit', lead: 'Lt. Navarro', readiness: 'Medium', status: 'Standby' },
-    { id: 'RT-207', name: 'Engineering Corps', lead: 'Eng. Santos', readiness: 'High', status: 'Standby' },
-  ]);
+  const { data: teamData, setData: setTeamData } = useRealtimeStream('/api/v1/stream/teams', []);
+  const { data: disasterEvents } = useRealtimeStream('/api/v1/stream/disasters', []);
+  const [teams, setTeams] = useState([]);
 
   const [draggedTeam, setDraggedTeam] = useState(null);
 
+  useEffect(() => {
+    const mapped = (teamData || []).map((team) => ({
+      id: team.id || team._id || 'RT-000',
+      name: team.team_name || 'Unnamed Team',
+      lead: team.contact || 'Unassigned',
+      readiness: team.specialization || 'General',
+      status: team.operation_zone ? 'Deployed' : 'Standby',
+    }));
+    setTeams(mapped);
+  }, [teamData]);
+
   const handleDragStart = (e, teamId) => {
     setDraggedTeam(teamId);
+    e.dataTransfer.setData('text/plain', teamId);
     e.dataTransfer.effectAllowed = 'move';
   };
 
   const handleDragEnd = () => setDraggedTeam(null);
   const handleDragOver = (e) => e.preventDefault();
 
-  const handleDrop = (e, newStatus) => {
+  const handleDrop = async (e, newStatus) => {
     e.preventDefault();
-    if (draggedTeam) {
-      setTeams(teams.map(team =>
-        team.id === draggedTeam ? { ...team, status: newStatus } : team
-      ));
-      setDraggedTeam(null);
+    const teamId = draggedTeam || e.dataTransfer.getData('text/plain');
+    if (!teamId) return;
+    setTeams((prev) => prev.map(team =>
+      team.id === teamId ? { ...team, status: newStatus } : team
+    ));
+    setDraggedTeam(null);
+    const rawTeam = (teamData || []).find((item) => (item.id || item._id) === teamId);
+    if (!rawTeam) return;
+    const nextOperationZone = newStatus === 'Deployed' ? (rawTeam.operation_zone || 'Active Zone') : null;
+    try {
+      await request(`/api/v1/teams/${teamId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ operation_zone: nextOperationZone }),
+      });
+    } catch (err) {
+      pushToast(err?.message || 'Failed to update deployment status.', 'error');
     }
   };
 
-  const pushToast = (message) => {
+  const pushToast = (message, type = 'info') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setToasts((prev) => [...prev, { id, message }]);
+    setToasts((prev) => [...prev, { id, message, type }]);
   };
 
   const clearToasts = () => {
@@ -54,13 +83,13 @@ const ManageTeams = () => {
   const validateTeam = () => {
     const nextErrors = {};
     if (!sanitizeText(unitName)) nextErrors.unitName = true;
-    if (!sanitizeText(teamLead)) nextErrors.teamLead = true;
+    if (!sanitizeText(contact)) nextErrors.contact = true;
+    if (!sanitizeText(teamType)) nextErrors.teamType = true;
     if (!sanitizeText(specialization)) nextErrors.specialization = true;
-    if (!sanitizeText(readiness)) nextErrors.readiness = true;
 
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
-      pushToast('Please fill out all required fields.');
+      pushToast('Please fill out all required fields.', 'warning');
       return false;
     }
     return true;
@@ -68,10 +97,13 @@ const ManageTeams = () => {
 
   const resetTeamForm = () => {
     setUnitName('');
-    setTeamLead('');
+    setContact('');
+    setTeamType('');
     setSpecialization('');
-    setReadiness('');
+    setAssignedEventId('');
+    setOperationZone('');
     setErrors({});
+    setEditingTeamId('');
   };
 
   const handleCloseTeamModal = () => {
@@ -79,15 +111,86 @@ const ManageTeams = () => {
     resetTeamForm();
   };
 
-  const handleCreateTeam = () => {
+  const handleEditTeam = (team) => {
+    setEditingTeamId(team.id || team._id || '');
+    setUnitName(team.team_name || '');
+    setContact(team.contact || '');
+    setTeamType(team.team_type || '');
+    setSpecialization(team.specialization || '');
+    setAssignedEventId(team.assigned_event_id || '');
+    setOperationZone(team.operation_zone || '');
+    setErrors({});
+    setTeamModalOpen(true);
+  };
+
+  const handleDeleteTeam = (team) => {
+    if (!team?.id && !team?._id) return;
+    setDeleteTarget(team);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    const teamId = deleteTarget?.id || deleteTarget?._id;
+    if (!teamId) return;
+    try {
+      await request(`/api/v1/teams/${teamId}`, { method: 'DELETE' });
+      setTeamData((prev) => (Array.isArray(prev)
+        ? prev.filter((item) => (item.id || item._id) !== teamId)
+        : prev));
+      pushToast('Team deleted.', 'success');
+    } catch (err) {
+      pushToast(err?.message || 'Failed to delete team.', 'error');
+    } finally {
+      setDeleteModalOpen(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleCreateTeam = async () => {
     if (!validateTeam()) return;
-    pushToast('New response team registered.');
-    setTeamModalOpen(false);
-    resetTeamForm();
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        team_name: unitName,
+        team_type: teamType,
+        specialization,
+        contact,
+        assigned_event_id: sanitizeText(assignedEventId) || null,
+        operation_zone: sanitizeText(operationZone) || null,
+      };
+      if (editingTeamId) {
+        const updated = await request(`/api/v1/teams/${editingTeamId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        setTeamData((prev) => (Array.isArray(prev)
+          ? prev.map((item) => ((item.id || item._id) === editingTeamId ? updated : item))
+          : prev));
+        pushToast('Team updated successfully.', 'success');
+      } else {
+        const created = await request('/api/v1/teams/', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setTeamData((prev) => [created, ...(Array.isArray(prev) ? prev : [])]);
+        pushToast('New response team registered.', 'success');
+      }
+      setTeamModalOpen(false);
+      resetTeamForm();
+    } catch (err) {
+      pushToast(err?.message || 'Failed to register team.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const deployedCount = teams.filter(t => t.status === 'Deployed').length;
   const standbyCount = teams.filter(t => t.status === 'Standby').length;
+  const eventOptions = (disasterEvents || []).map((event) => {
+    const eventId = event.id || event._id || 'DR-000';
+    const label = event.disaster_type || eventId;
+    return { label, value: eventId };
+  });
 
   return (
     <div className="dashboard-view fade-in">
@@ -128,7 +231,15 @@ const ManageTeams = () => {
               </span>
             </h3>
             {teams.filter(t => t.status === 'Deployed').map(team => (
-              <TeamCard key={team.id} team={team} isDragging={draggedTeam === team.id} onDragStart={(e) => handleDragStart(e, team.id)} onDragEnd={handleDragEnd} />
+              <TeamCard
+                key={team.id}
+                team={team}
+                isDragging={draggedTeam === team.id}
+                onDragStart={(e) => handleDragStart(e, team.id)}
+                onDragEnd={handleDragEnd}
+                onEdit={() => handleEditTeam((teamData || []).find((item) => (item.id || item._id) === team.id) || {})}
+                onDelete={() => handleDeleteTeam((teamData || []).find((item) => (item.id || item._id) === team.id) || {})}
+              />
             ))}
           </div>
 
@@ -145,14 +256,28 @@ const ManageTeams = () => {
               </span>
             </h3>
             {teams.filter(t => t.status === 'Standby').map(team => (
-              <TeamCard key={team.id} team={team} isDragging={draggedTeam === team.id} onDragStart={(e) => handleDragStart(e, team.id)} onDragEnd={handleDragEnd} />
+              <TeamCard
+                key={team.id}
+                team={team}
+                isDragging={draggedTeam === team.id}
+                onDragStart={(e) => handleDragStart(e, team.id)}
+                onDragEnd={handleDragEnd}
+                onEdit={() => handleEditTeam((teamData || []).find((item) => (item.id || item._id) === team.id) || {})}
+                onDelete={() => handleDeleteTeam((teamData || []).find((item) => (item.id || item._id) === team.id) || {})}
+              />
             ))}
           </div>
 
         </div>
       </div>
 
-      <Modal isOpen={isTeamModalOpen} onClose={handleCloseTeamModal} title="Register Response Team" actionText="Register Team" onAction={handleCreateTeam}>
+      <Modal
+        isOpen={isTeamModalOpen}
+        onClose={handleCloseTeamModal}
+        title={editingTeamId ? 'Edit Response Team' : 'Register Response Team'}
+        actionText={isSubmitting ? "Saving..." : (editingTeamId ? 'Save Changes' : 'Register Team')}
+        onAction={handleCreateTeam}
+      >
         <div className="labs-form-group">
           <label>Unit Name</label>
           <input
@@ -169,46 +294,85 @@ const ManageTeams = () => {
           />
         </div>
         <div className="labs-form-group">
-          <label>Team Lead / Commander</label>
+          <label>Contact</label>
           <input
             type="text"
-            className={`labs-input${errors.teamLead ? ' is-invalid' : ''}`}
-            placeholder="Officer Name"
-            value={teamLead}
+            className={`labs-input${errors.contact ? ' is-invalid' : ''}`}
+            placeholder="Contact Person"
+            value={contact}
             maxLength={120}
             onChange={(e) => {
-              setTeamLead(e.target.value);
-              if (errors.teamLead) setErrors((prev) => ({ ...prev, teamLead: false }));
+              setContact(e.target.value);
+              if (errors.contact) setErrors((prev) => ({ ...prev, contact: false }));
             }}
-            aria-invalid={!!errors.teamLead}
+            aria-invalid={!!errors.contact}
           />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+        <div className="labs-form-grid">
+          <div className="labs-form-group">
+            <label>Team Type</label>
+            <LabsDropdown
+              options={["Government", "NGO", "Volunteer"]}
+              value={teamType}
+              onChange={(value) => {
+                setTeamType(value);
+                if (errors.teamType) setErrors((prev) => ({ ...prev, teamType: false }));
+              }}
+              placeholder="Select Team Type"
+              hasError={errors.teamType}
+            />
+          </div>
           <div className="labs-form-group">
             <label>Specialization</label>
             <LabsDropdown
-              options={["Medical", "Search & Rescue", "Logistics"]}
+              options={["Rescue", "Medical", "Logistics", "Relief"]}
               value={specialization}
               onChange={(value) => {
                 setSpecialization(value);
                 if (errors.specialization) setErrors((prev) => ({ ...prev, specialization: false }));
               }}
-              placeholder="Select Type"
+              placeholder="Select Specialization"
               hasError={errors.specialization}
             />
           </div>
+        </div>
+        <div className="labs-form-grid">
           <div className="labs-form-group">
-            <label>Initial Readiness</label>
+            <label>Assigned Event ID (Optional)</label>
             <LabsDropdown
-              options={["High", "Medium", "Low"]}
-              value={readiness}
-              onChange={(value) => {
-                setReadiness(value);
-                if (errors.readiness) setErrors((prev) => ({ ...prev, readiness: false }));
-              }}
-              placeholder="Select State"
-              hasError={errors.readiness}
+              options={eventOptions}
+              value={assignedEventId}
+              onChange={(value) => setAssignedEventId(value)}
+              placeholder={eventOptions.length ? 'Select event' : 'No active events'}
             />
+          </div>
+          <div className="labs-form-group">
+            <label>Operation Zone (Optional)</label>
+            <input
+              type="text"
+              className="labs-input"
+              placeholder="Zone / Area"
+              value={operationZone}
+              onChange={(e) => setOperationZone(e.target.value)}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteTarget(null);
+        }}
+        title="Delete Response Team"
+        actionText="Delete Team"
+        onAction={handleConfirmDelete}
+      >
+        <div className="delete-modal-message">
+          This team will be permanently removed from the network.
+          <div className="delete-modal-meta">
+            {deleteTarget?.team_name || deleteTarget?.name || 'Selected team'}
           </div>
         </div>
       </Modal>
@@ -218,7 +382,7 @@ const ManageTeams = () => {
   );
 };
 
-const TeamCard = ({ team, isDragging, onDragStart, onDragEnd }) => {
+const TeamCard = ({ team, isDragging, onDragStart, onDragEnd, onEdit, onDelete }) => {
   return (
     <div
       draggable
@@ -243,12 +407,34 @@ const TeamCard = ({ team, isDragging, onDragStart, onDragEnd }) => {
       </div>
       <div style={{ textAlign: 'right' }}>
         <div className="mono-label" style={{ marginBottom: '6px', fontSize: '0.85rem' }}>{team.id}</div>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '8px' }}>
+          <button
+            className="edit-icon-btn"
+            title="Edit team"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onEdit) onEdit();
+            }}
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>edit</span>
+          </button>
+          <button
+            className="delete-icon-btn"
+            title="Delete team"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onDelete) onDelete();
+            }}
+          >
+            <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>delete</span>
+          </button>
+        </div>
         <div style={{
           display: 'inline-block', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px',
-          padding: '4px 10px', borderRadius: '8px', background: team.readiness === 'High' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)',
-          color: team.readiness === 'High' ? '#ffffff' : '#a1a1aa'
+          padding: '4px 10px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.08)',
+          color: '#ffffff'
         }}>
-          {team.readiness} Ready
+          {team.readiness}
         </div>
       </div>
     </div>

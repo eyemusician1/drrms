@@ -1,28 +1,50 @@
 import React, { useState } from 'react';
 import Modal from '../../components/ui/Modal';
+import LabsDropdown from '../../components/ui/LabsDropdown';
 import Toast from '../../components/ui/Toast'; // <-- Import Toast
+import { useRealtimeStream } from '../../hooks/useRealtimeStream';
+import { useApi } from '../../hooks/useApi';
 import './ManagePages.css';
 
 const ManageEvacuation = () => {
   const [isShelterModalOpen, setShelterModalOpen] = useState(false);
   const [facilityName, setFacilityName] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [currentOccupancy, setCurrentOccupancy] = useState('');
+  const [eventId, setEventId] = useState('');
+  const [location, setLocation] = useState('');
   const [manager, setManager] = useState('');
   const [errors, setErrors] = useState({});
   const [toasts, setToasts] = useState([]);
+  const { data: centerData, setData: setCenterData } = useRealtimeStream('/api/v1/stream/evacuation', []);
+  const { data: disasterEvents } = useRealtimeStream('/api/v1/stream/disasters', []);
+  const { request } = useApi();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingCenterId, setEditingCenterId] = useState('');
+  const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const stats = [ { label: 'Active Centers', value: '03' }, { label: 'Total Evacuees', value: '1,030' } ];
+  const shelters = (centerData || []).map((center) => ({
+    id: center.id || center._id || 'EV-000',
+    name: center.name || 'Unnamed Center',
+    current: center.current_occupancy ?? 0,
+    capacity: center.capacity ?? 0,
+  }));
 
-  const shelters = [
-    { id: 'EV-01', name: 'Plaridel Central School', current: 480, capacity: 500 },
-    { id: 'EV-02', name: 'Civic Center Complex', current: 350, capacity: 1200 },
-    { id: 'EV-03', name: 'Northern Parish Hall', current: 200, capacity: 200 },
-    { id: 'EV-04', name: 'Westside Gymnasium', current: 0, capacity: 800 },
+  const totalEvacuees = shelters.reduce((sum, shelter) => sum + (shelter.current || 0), 0);
+  const stats = [
+    { label: 'Active Centers', value: String(shelters.length).padStart(2, '0') },
+    { label: 'Total Evacuees', value: totalEvacuees.toLocaleString() },
   ];
+  const eventOptions = (disasterEvents || []).map((event) => {
+    const eventIdValue = event.id || event._id || 'DR-000';
+    const label = event.disaster_type || eventIdValue;
+    return { label, value: eventIdValue };
+  });
 
-  const pushToast = (message) => {
+  const pushToast = (message, type = 'info') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    setToasts((prev) => [...prev, { id, message }]);
+    setToasts((prev) => [...prev, { id, message, type }]);
   };
 
   const clearToasts = () => {
@@ -33,13 +55,16 @@ const ManageEvacuation = () => {
 
   const validateShelter = () => {
     const nextErrors = {};
+    if (!sanitizeText(eventId)) nextErrors.eventId = true;
+    if (!sanitizeText(location)) nextErrors.location = true;
     if (!sanitizeText(facilityName)) nextErrors.facilityName = true;
     if (!sanitizeText(manager)) nextErrors.manager = true;
     if (!capacity || Number(capacity) <= 0) nextErrors.capacity = true;
+    if (currentOccupancy !== '' && Number(currentOccupancy) < 0) nextErrors.currentOccupancy = true;
 
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
-      pushToast('Please fill out all required fields.');
+      pushToast('Please fill out all required fields.', 'warning');
       return false;
     }
     return true;
@@ -48,8 +73,12 @@ const ManageEvacuation = () => {
   const resetShelterForm = () => {
     setFacilityName('');
     setCapacity('');
+    setCurrentOccupancy('');
+    setEventId('');
+    setLocation('');
     setManager('');
     setErrors({});
+    setEditingCenterId('');
   };
 
   const handleCloseShelterModal = () => {
@@ -57,11 +86,77 @@ const ManageEvacuation = () => {
     resetShelterForm();
   };
 
-  const handleOpenShelter = () => {
+  const handleEditShelter = (center) => {
+    setEditingCenterId(center.id || center._id || '');
+    setEventId(center.event_id || '');
+    setFacilityName(center.name || '');
+    setLocation(center.location || '');
+    setCapacity(center.capacity ? String(center.capacity) : '');
+    setCurrentOccupancy(center.current_occupancy ? String(center.current_occupancy) : '');
+    setManager(center.managing_personnel || '');
+    setErrors({});
+    setShelterModalOpen(true);
+  };
+
+  const handleDeleteShelter = (center) => {
+    if (!center?.id && !center?._id) return;
+    setDeleteTarget(center);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    const centerId = deleteTarget?.id || deleteTarget?._id;
+    if (!centerId) return;
+    try {
+      await request(`/api/v1/evacuation/${centerId}`, { method: 'DELETE' });
+      setCenterData((prev) => (Array.isArray(prev)
+        ? prev.filter((item) => (item.id || item._id) !== centerId)
+        : prev));
+      pushToast('Evacuation center deleted.', 'success');
+    } catch (err) {
+      pushToast(err?.message || 'Failed to delete center.', 'error');
+    } finally {
+      setDeleteModalOpen(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleOpenShelter = async () => {
     if (!validateShelter()) return;
-    pushToast('New Safe Haven initialized in the network.');
-    setShelterModalOpen(false);
-    resetShelterForm();
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        event_id: eventId,
+        name: facilityName,
+        location,
+        capacity: Number(capacity),
+        current_occupancy: currentOccupancy ? Number(currentOccupancy) : 0,
+        managing_personnel: manager,
+      };
+      if (editingCenterId) {
+        const updated = await request(`/api/v1/evacuation/${editingCenterId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+        setCenterData((prev) => (Array.isArray(prev)
+          ? prev.map((item) => ((item.id || item._id) === editingCenterId ? updated : item))
+          : prev));
+        pushToast('Evacuation center updated.', 'success');
+      } else {
+        const created = await request('/api/v1/evacuation/', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        setCenterData((prev) => [created, ...(Array.isArray(prev) ? prev : [])]);
+        pushToast('New Safe Haven initialized in the network.', 'success');
+      }
+      setShelterModalOpen(false);
+      resetShelterForm();
+    } catch (err) {
+      pushToast(err?.message || 'Failed to open shelter.', 'error');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -94,7 +189,23 @@ const ManageEvacuation = () => {
                 <div className="facility-card" key={shelter.id}>
                   <div className="card-header-flex" style={{ marginBottom: '40px' }}>
                     <h3 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 400, color: '#fff' }}>{shelter.name}</h3>
-                    <span className="mono-label" style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', borderRadius: '99px' }}>{shelter.id}</span>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span className="mono-label" style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', borderRadius: '99px' }}>{shelter.id}</span>
+                      <button
+                        className="edit-icon-btn"
+                        title="Edit center"
+                        onClick={() => handleEditShelter((centerData || []).find((item) => (item.id || item._id) === shelter.id) || {})}
+                      >
+                        <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>edit</span>
+                      </button>
+                      <button
+                        className="delete-icon-btn"
+                        title="Delete center"
+                        onClick={() => handleDeleteShelter((centerData || []).find((item) => (item.id || item._id) === shelter.id) || {})}
+                      >
+                        <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>delete</span>
+                      </button>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px' }}>
                     <span style={{ fontSize: '5rem', fontWeight: 300, color: isFull ? '#ef4444' : '#fff', lineHeight: 1, letterSpacing: '-3px' }}>
@@ -112,7 +223,26 @@ const ManageEvacuation = () => {
         </div>
       </div>
 
-      <Modal isOpen={isShelterModalOpen} onClose={handleCloseShelterModal} title="Initialize New Safe Haven" actionText="Open Shelter" onAction={handleOpenShelter}>
+      <Modal
+        isOpen={isShelterModalOpen}
+        onClose={handleCloseShelterModal}
+        title={editingCenterId ? 'Edit Evacuation Center' : 'Initialize New Safe Haven'}
+        actionText={isSubmitting ? "Saving..." : (editingCenterId ? 'Save Changes' : 'Open Shelter')}
+        onAction={handleOpenShelter}
+      >
+        <div className="labs-form-group">
+          <label>Event ID</label>
+          <LabsDropdown
+            options={eventOptions}
+            value={eventId}
+            onChange={(value) => {
+              setEventId(value);
+              if (errors.eventId) setErrors((prev) => ({ ...prev, eventId: false }));
+            }}
+            placeholder={eventOptions.length ? 'Select event' : 'No active events'}
+            hasError={errors.eventId}
+          />
+        </div>
         <div className="labs-form-group">
           <label>Facility Name</label>
           <input
@@ -126,6 +256,21 @@ const ManageEvacuation = () => {
               if (errors.facilityName) setErrors((prev) => ({ ...prev, facilityName: false }));
             }}
             aria-invalid={!!errors.facilityName}
+          />
+        </div>
+        <div className="labs-form-group">
+          <label>Location</label>
+          <input
+            type="text"
+            className={`labs-input${errors.location ? ' is-invalid' : ''}`}
+            placeholder="Address or Zone"
+            value={location}
+            maxLength={160}
+            onChange={(e) => {
+              setLocation(e.target.value);
+              if (errors.location) setErrors((prev) => ({ ...prev, location: false }));
+            }}
+            aria-invalid={!!errors.location}
           />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
@@ -147,19 +292,53 @@ const ManageEvacuation = () => {
             />
           </div>
           <div className="labs-form-group">
-            <label>Managing Personnel</label>
+            <label>Current Occupancy</label>
             <input
-              type="text"
-              className={`labs-input${errors.manager ? ' is-invalid' : ''}`}
-              placeholder="Officer Name"
-              value={manager}
-              maxLength={120}
+              type="number"
+              min="0"
+              onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+              className={`labs-input${errors.currentOccupancy ? ' is-invalid' : ''}`}
+              placeholder="0"
+              value={currentOccupancy}
               onChange={(e) => {
-                setManager(e.target.value);
-                if (errors.manager) setErrors((prev) => ({ ...prev, manager: false }));
+                setCurrentOccupancy(e.target.value);
+                if (errors.currentOccupancy) setErrors((prev) => ({ ...prev, currentOccupancy: false }));
               }}
-              aria-invalid={!!errors.manager}
+              aria-invalid={!!errors.currentOccupancy}
             />
+          </div>
+        </div>
+        <div className="labs-form-group">
+          <label>Managing Personnel</label>
+          <input
+            type="text"
+            className={`labs-input${errors.manager ? ' is-invalid' : ''}`}
+            placeholder="Officer Name"
+            value={manager}
+            maxLength={120}
+            onChange={(e) => {
+              setManager(e.target.value);
+              if (errors.manager) setErrors((prev) => ({ ...prev, manager: false }));
+            }}
+            aria-invalid={!!errors.manager}
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={isDeleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteTarget(null);
+        }}
+        title="Delete Evacuation Center"
+        actionText="Delete Center"
+        onAction={handleConfirmDelete}
+      >
+        <div className="delete-modal-message">
+          This evacuation center will be permanently removed.
+          <div className="delete-modal-meta">
+            {deleteTarget?.name || deleteTarget?.id || deleteTarget?._id || 'Selected center'}
           </div>
         </div>
       </Modal>

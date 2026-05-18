@@ -214,6 +214,28 @@
   font-size: 16px;
 }
 
+.alert-badge {
+  font-size: 0.7rem;
+  color: #e2e8f0;
+  border: 1px solid rgba(226, 232, 240, 0.4);
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.delete-modal-message {
+  color: #c4c7c5;
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+
+.delete-modal-meta {
+  margin-top: 8px;
+  color: #8e918f;
+  font-size: 0.85rem;
+}
+
 /* Monochromatic Severity - Pure CSS Opacities */
 .severity-critical .severity-badge { color: #ffffff; border: 1px solid #ffffff; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; font-weight: 600;}
 .severity-high .severity-badge { color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.5); padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; }

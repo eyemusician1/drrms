@@ -4,6 +4,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 // Layout & Auth
 import Login from './pages/auth/Login';
 import Sidebar from './components/layout/Sidebar';
+import ProtectedRoute from './components/layout/ProtectedRoute';
 
 // Management Pages
 import Dashboard from './pages/manage/Dashboard';
@@ -30,7 +31,14 @@ function App() {
       <Route path="/" element={<Login />} />
 
       {/* Admin Management Routes */}
-      <Route path="/manage" element={<AdminLayout />}>
+      <Route
+        path="/manage"
+        element={
+          <ProtectedRoute>
+            <AdminLayout />
+          </ProtectedRoute>
+        }
+      >
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="disasters" element={<ManageDisasters />} />
