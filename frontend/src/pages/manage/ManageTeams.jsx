@@ -372,7 +372,7 @@ const ManageTeams = () => {
         <div className="delete-modal-message">
           This team will be permanently removed from the network.
           <div className="delete-modal-meta">
-            {deleteTarget?.team_name || deleteTarget?.name || 'Selected team'}
+            {deleteTarget?.team_name || deleteTarget?.contact || deleteTarget?.name || 'Selected team'}
           </div>
         </div>
       </Modal>
@@ -406,7 +406,7 @@ const TeamCard = ({ team, isDragging, onDragStart, onDragEnd, onEdit, onDelete }
         </div>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <div className="mono-label" style={{ marginBottom: '6px', fontSize: '0.85rem' }}>{team.id}</div>
+        <div className="mono-label" style={{ marginBottom: '6px', fontSize: '0.85rem' }}>{team.status}</div>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginBottom: '8px' }}>
           <button
             className="edit-icon-btn"

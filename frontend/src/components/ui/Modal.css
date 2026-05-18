@@ -91,6 +91,39 @@
   flex-shrink: 0;
 }
 
+@media (max-width: 720px) {
+  .labs-modal-container {
+    max-width: 92vw;
+    border-radius: 22px;
+    max-height: 88vh;
+  }
+
+  .labs-modal-header {
+    padding: 18px 20px 12px;
+  }
+
+  .labs-modal-body {
+    padding: 12px 20px 20px;
+    gap: 16px;
+  }
+
+  .labs-modal-footer {
+    padding: 16px 20px 20px;
+    gap: 10px;
+  }
+
+  .labs-input {
+    padding: 12px 14px;
+    font-size: 0.95rem;
+  }
+
+  .labs-btn-large,
+  .labs-btn-ghost {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+  }
+}
+
 /* --- LABS FORM ELEMENTS --- */
 .labs-form-group {
   display: flex;

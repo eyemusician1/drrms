@@ -188,7 +188,7 @@ const ManageDisasters = () => {
               <div className="incident-card" key={incident.id}>
                 <div className="card-header-flex">
                   <span className={`severity-badge severity-${incident.severity.toLowerCase()}`} style={{ fontSize: '0.8rem', padding: '4px 12px' }}>{incident.severity}</span>
-                  <span className="mono-label">{incident.id}</span>
+                  <span className="mono-label">Incident</span>
                 </div>
                 <div>
                   <h3 style={{ margin: '0 0 12px 0', fontSize: '1.8rem', fontWeight: '400', color: '#fff', letterSpacing: '-1px' }}>{incident.type}</h3>
@@ -327,7 +327,7 @@ const ManageDisasters = () => {
         <div className="delete-modal-message">
           This incident will be permanently removed from the directory.
           <div className="delete-modal-meta">
-            {deleteTarget?.disaster_type || deleteTarget?.id || deleteTarget?._id || 'Selected incident'}
+            {deleteTarget?.disaster_type || deleteTarget?.location || 'Selected incident'}
           </div>
         </div>
       </Modal>

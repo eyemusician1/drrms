@@ -26,12 +26,16 @@ const ManageRelief = () => {
 
   const inventory = (reliefOperations || []).map((operation) => {
     const quantityValue = operation.beneficiaries ?? 0;
+    const dateLabel = operation.date
+      ? new Date(operation.date).toLocaleDateString('en-US')
+      : 'Relief';
     return {
       id: operation.id || operation._id || 'INV-000',
       category: operation.operation_type || 'Relief',
       quantity: quantityValue.toLocaleString(),
       cap: Math.max(quantityValue, 1000),
       color: quantityValue > 0 ? '#ffffff' : '#ef4444',
+      dateLabel,
     };
   });
 
@@ -130,9 +134,16 @@ const ManageRelief = () => {
     if (!validateSupply()) return;
     setIsSubmitting(true);
     try {
+      const operationTypeMap = {
+        'Food Packs': 'Food',
+        'Shelter Materials': 'Shelter',
+        'Financial Aid': 'Financial',
+        'Medical Kits': 'Medical',
+      };
+      const operationType = operationTypeMap[category] || category;
       const payload = {
         event_id: eventId,
-        operation_type: category,
+        operation_type: operationType,
         date: new Date(date).toISOString(),
         beneficiaries: Number(beneficiaries || 0),
         resources_distributed: resourcesDistributed,
@@ -193,7 +204,7 @@ const ManageRelief = () => {
               const percent = (parseInt(item.quantity.replace(',','')) / item.cap) * 100;
               return (
                 <div className="inventory-row" key={item.id}>
-                  <span className="mono-label" style={{ fontSize: '1rem' }}>{item.id}</span>
+                  <span className="mono-label" style={{ fontSize: '1rem' }}>{item.dateLabel}</span>
                   <span className="incident-type" style={{ fontSize: '1.2rem', margin: 0 }}>{item.category}</span>
                   <div style={{ paddingRight: '40px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', marginBottom: '4px', color: '#a1a1aa' }}>
@@ -256,7 +267,12 @@ const ManageRelief = () => {
         <div className="labs-form-group">
           <label>Resource Category</label>
           <LabsDropdown
-            options={["Food Packs", "Clean Water (L)", "Medical Kits", "Shelter Materials"]}
+            options={[
+              { label: 'Food Packs', value: 'Food' },
+              { label: 'Shelter Materials', value: 'Shelter' },
+              { label: 'Financial Aid', value: 'Financial' },
+              { label: 'Medical Kits', value: 'Medical' },
+            ]}
             value={category}
             onChange={(value) => {
               setCategory(value);
@@ -337,7 +353,7 @@ const ManageRelief = () => {
         <div className="delete-modal-message">
           This relief operation will be permanently removed from the manifest.
           <div className="delete-modal-meta">
-            {deleteTarget?.operation_type || deleteTarget?.id || deleteTarget?._id || 'Selected operation'}
+            {deleteTarget?.operation_type || deleteTarget?.date || 'Selected operation'}
           </div>
         </div>
       </Modal>

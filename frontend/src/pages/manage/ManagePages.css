@@ -191,4 +191,29 @@
   .labs-form-grid {
     grid-template-columns: 1fr;
   }
+
+  .incident-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .facility-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kanban-board {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 20px 20px;
+  }
+}
+
+@media (max-width: 900px) {
+  .inventory-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
 }
