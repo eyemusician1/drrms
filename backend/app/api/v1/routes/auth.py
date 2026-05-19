@@ -33,9 +33,13 @@ class RegisterRequest(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str
 
+
+
 @router.post("/login")
 @limiter.limit(f"{settings.AUTH_RATE_LIMIT_PER_MINUTE}/minute")
 async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+
+    #look up officer by email in the "officers" collection
     officer = await Officer.find_one(Officer.email == form_data.username)
     if officer and officer.locked_until and officer.locked_until > datetime.utcnow():
         raise HTTPException(
@@ -53,6 +57,8 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     officer.locked_until = None
     officer.last_login = datetime.utcnow()
     await officer.save()
+
+    #generate tokens and return them
     access_token = create_access_token({"sub": officer.email, "role": officer.role})
     refresh_token = create_refresh_token({"sub": officer.email})
     return {
@@ -93,6 +99,8 @@ async def logout(
     await TokenBlacklist(token=token, expires_at=expires_at).insert()
     return {"message": "Logged out successfully"}
 
+
+#
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register_officer(
     payload: RegisterRequest,
@@ -110,13 +118,15 @@ async def register_officer(
     existing = await Officer.find_one(Officer.email == payload.email)
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
+    
+    # create the document into MongoDB
     officer = Officer(
         full_name=payload.full_name,
         email=payload.email,
-        hashed_password=hash_password(payload.password),
+        hashed_password=hash_password(payload.password), #hashes the password from the payload
         role=role,
     )
-    await officer.insert()
+    await officer.insert() #then insert the created document
     return {"message": f"Officer {payload.full_name} registered successfully", "role": officer.role}
 
 @router.get("/me")

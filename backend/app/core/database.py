@@ -13,6 +13,7 @@ from app.models.token_blacklist import TokenBlacklist
 
 async def init_db() -> None:
     try:
+        # 1. Opens a connection to MongoDB using the URI from .env
         client = AsyncIOMotorClient(
             settings.MONGO_URI,
             serverSelectionTimeoutMS=5000
