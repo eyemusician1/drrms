@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import './Sidebar.css';
 
 const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const navigate = useNavigate(); //declare function to nav
 
   const links = [
     { name: 'Overview', icon: 'grid_view', path: '/manage/dashboard' },
@@ -12,6 +13,30 @@ const Sidebar = () => {
     { name: 'Relief Ops', icon: 'package_2', path: '/manage/relief' },
     { name: 'Evacuation', icon: 'door_front', path: '/manage/evacuation' },
   ];
+
+  const handleLogout = async () => {
+    const token = localStorage.getItem('access_token');
+
+    try {
+      await fetch('http://localhost:8000/api/v1/auth/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+    } catch (err) {
+      console.error('Logout request failed:', err);
+    }
+
+
+    //clear all data regarding the logged in user
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('role');
+    navigate('/');
+  }
+
 
   return (
     <aside className={`labs-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
@@ -41,7 +66,7 @@ const Sidebar = () => {
       </nav>
 
       <div className="sidebar-footer">
-        <button className="logout-btn" title={isCollapsed ? "Logout" : ""}>
+        <button className="logout-btn" title={isCollapsed ? "Logout" : ""} onClick={handleLogout}>
           <span className="material-symbols-rounded">logout</span>
           {!isCollapsed && <span className="link-label">Logout</span>}
         </button>

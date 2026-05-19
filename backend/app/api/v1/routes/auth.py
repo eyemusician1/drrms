@@ -92,9 +92,10 @@ async def refresh_token(payload: RefreshRequest):
 
 @router.post("/logout")
 async def logout(
-    current_officer: Officer = Depends(get_current_officer),
+    current_officer: Officer = Depends(get_current_officer), #gets the current logged in
     token: str = Depends(oauth2_scheme)
 ):
+    #added an expiration date for the token and will become stored in token_blacklist
     expires_at = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     await TokenBlacklist(token=token, expires_at=expires_at).insert()
     return {"message": "Logged out successfully"}
