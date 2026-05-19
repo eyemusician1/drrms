@@ -1,3 +1,4 @@
+#backend/app/api/v1/routes/disaster.py
 from datetime import datetime
 from typing import Literal, Optional
 
@@ -14,7 +15,7 @@ router = APIRouter()
 
 
 class DisasterEventCreate(BaseModel):
-	disaster_type: Literal["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide"]
+	disaster_type: Literal["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide", "Tsunami"]
 	location: str
 	date_occurred: datetime
 	severity_level: Literal["Low", "Moderate", "High", "Critical"]
@@ -23,7 +24,7 @@ class DisasterEventCreate(BaseModel):
 
 
 class DisasterEventUpdate(BaseModel):
-	disaster_type: Optional[Literal["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide"]] = None
+	disaster_type: Optional[Literal["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide", "Tsunami"]] = None
 	location: Optional[str] = None
 	date_occurred: Optional[datetime] = None
 	severity_level: Optional[Literal["Low", "Moderate", "High", "Critical"]] = None
