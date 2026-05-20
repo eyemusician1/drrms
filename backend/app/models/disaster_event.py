@@ -2,9 +2,12 @@ from beanie import Document
 from typing import Optional, Literal
 from datetime import datetime
 
+
 class DisasterEvent(Document):
     disaster_type: Literal["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide"]
     location: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     date_occurred: datetime
     severity_level: Literal["Low", "Moderate", "High", "Critical"]
     duration_days: Optional[int] = None

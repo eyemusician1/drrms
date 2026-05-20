@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
+import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
 import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
-import { digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
+import { coordinateOnly, digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
 import './ManagePages.css';
 
 const ManageDisasters = () => {
   const [isIncidentModalOpen, setIncidentModalOpen] = useState(false);
   const [disasterType, setDisasterType] = useState('');
   const [severity, setSeverity] = useState('');
-  const [epicenter, setEpicenter] = useState('');
+  const [locationLabel, setLocationLabel] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
   const [dateOccurred, setDateOccurred] = useState(() => new Date().toISOString().slice(0, 10));
   const [durationDays, setDurationDays] = useState('');
   const [status, setStatus] = useState('Ongoing');
@@ -50,11 +53,29 @@ const ManageDisasters = () => {
 
   const sanitizeText = (value) => sanitizeTextInput(value, 200).trim();
 
+  const parseCoordinatePair = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    const match = value.match(/-?\d+(?:\.\d+)?/g);
+    if (!match || match.length < 2) return null;
+    return { lat: match[0], lng: match[1] };
+  };
+
+  const isValidLat = (value) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= -90 && parsed <= 90;
+  };
+
+  const isValidLng = (value) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= -180 && parsed <= 180;
+  };
+
   const validateIncident = () => {
     const nextErrors = {};
     if (!sanitizeText(disasterType)) nextErrors.disasterType = true;
     if (!sanitizeText(severity)) nextErrors.severity = true;
-    if (!sanitizeText(epicenter)) nextErrors.epicenter = true;
+    if (!isValidLat(latitude)) nextErrors.latitude = true;
+    if (!isValidLng(longitude)) nextErrors.longitude = true;
     if (!sanitizeText(dateOccurred)) nextErrors.dateOccurred = true;
     if (!sanitizeText(status)) nextErrors.status = true;
 
@@ -69,7 +90,9 @@ const ManageDisasters = () => {
   const resetIncidentForm = () => {
     setDisasterType('');
     setSeverity('');
-    setEpicenter('');
+    setLocationLabel('');
+    setLatitude('');
+    setLongitude('');
     setDateOccurred(new Date().toISOString().slice(0, 10));
     setDurationDays('');
     setStatus('Ongoing');
@@ -86,7 +109,15 @@ const ManageDisasters = () => {
     setEditingIncidentId(incident.id || incident._id || '');
     setDisasterType(incident.disaster_type || '');
     setSeverity(incident.severity_level || '');
-    setEpicenter(incident.location || '');
+    setLocationLabel(incident.location || '');
+    if (incident.latitude != null && incident.longitude != null) {
+      setLatitude(String(incident.latitude));
+      setLongitude(String(incident.longitude));
+    } else {
+      const parsed = parseCoordinatePair(incident.location || '');
+      setLatitude(parsed?.lat || '');
+      setLongitude(parsed?.lng || '');
+    }
     setDateOccurred(
       incident.date_occurred ? new Date(incident.date_occurred).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
     );
@@ -123,9 +154,12 @@ const ManageDisasters = () => {
     if (!validateIncident()) return;
     setIsSubmitting(true);
     try {
+      const normalizedLocation = locationLabel || `${latitude}, ${longitude}`;
       const payload = {
         disaster_type: disasterType,
-        location: epicenter,
+        location: normalizedLocation,
+        latitude: Number.parseFloat(latitude),
+        longitude: Number.parseFloat(longitude),
         date_occurred: new Date(dateOccurred).toISOString(),
         severity_level: severity,
         duration_days: durationDays ? Number(durationDays) : null,
@@ -258,18 +292,45 @@ const ManageDisasters = () => {
             />
           </div>
           <div className="labs-form-group">
-            <label>Epicenter / Location</label>
+            <label>Location (Philippines)</label>
+            <PhilippinesLocationPicker
+              onChange={(value) => setLocationLabel(value)}
+              onCoordinates={(coords) => {
+                setLatitude(String(coords.lat));
+                setLongitude(String(coords.lng));
+              }}
+            />
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <div className="labs-form-group">
+            <label>Latitude</label>
             <input
               type="text"
-              className={`labs-input${errors.epicenter ? ' is-invalid' : ''}`}
-              placeholder="Zone or Coordinates"
-              value={epicenter}
-              maxLength={120}
+              inputMode="decimal"
+              className={`labs-input${errors.latitude ? ' is-invalid' : ''}`}
+              placeholder="e.g. 14.5995"
+              value={latitude}
               onChange={(e) => {
-                setEpicenter(sanitizeTextInput(e.target.value, 120));
-                if (errors.epicenter) setErrors((prev) => ({ ...prev, epicenter: false }));
+                setLatitude(coordinateOnly(e.target.value, 12));
+                if (errors.latitude) setErrors((prev) => ({ ...prev, latitude: false }));
               }}
-              aria-invalid={!!errors.epicenter}
+              aria-invalid={!!errors.latitude}
+            />
+          </div>
+          <div className="labs-form-group">
+            <label>Longitude</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              className={`labs-input${errors.longitude ? ' is-invalid' : ''}`}
+              placeholder="e.g. 120.9842"
+              value={longitude}
+              onChange={(e) => {
+                setLongitude(coordinateOnly(e.target.value, 12));
+                if (errors.longitude) setErrors((prev) => ({ ...prev, longitude: false }));
+              }}
+              aria-invalid={!!errors.longitude}
             />
           </div>
         </div>

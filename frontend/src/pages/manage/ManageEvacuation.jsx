@@ -4,7 +4,7 @@ import LabsDropdown from '../../components/ui/LabsDropdown';
 import Toast from '../../components/ui/Toast'; // <-- Import Toast
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
-import { digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
+import { coordinateOnly, digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
 import './ManagePages.css';
 
 const ManageEvacuation = () => {
@@ -14,6 +14,8 @@ const ManageEvacuation = () => {
   const [currentOccupancy, setCurrentOccupancy] = useState('');
   const [eventId, setEventId] = useState('');
   const [location, setLocation] = useState('');
+  const [latitude, setLatitude] = useState('');
+  const [longitude, setLongitude] = useState('');
   const [manager, setManager] = useState('');
   const [errors, setErrors] = useState({});
   const [toasts, setToasts] = useState([]);
@@ -54,12 +56,31 @@ const ManageEvacuation = () => {
 
   const sanitizeText = (value) => sanitizeTextInput(value, 200).trim();
 
+  const parseCoordinatePair = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    const match = value.match(/-?\d+(?:\.\d+)?/g);
+    if (!match || match.length < 2) return null;
+    return { lat: match[0], lng: match[1] };
+  };
+
+  const isValidLat = (value) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= -90 && parsed <= 90;
+  };
+
+  const isValidLng = (value) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= -180 && parsed <= 180;
+  };
+
   const validateShelter = () => {
     const nextErrors = {};
     if (!sanitizeText(eventId)) nextErrors.eventId = true;
     if (!sanitizeText(location)) nextErrors.location = true;
     if (!sanitizeText(facilityName)) nextErrors.facilityName = true;
     if (!sanitizeText(manager)) nextErrors.manager = true;
+    if (!isValidLat(latitude)) nextErrors.latitude = true;
+    if (!isValidLng(longitude)) nextErrors.longitude = true;
     if (!capacity || Number(capacity) <= 0) nextErrors.capacity = true;
     if (currentOccupancy !== '' && Number(currentOccupancy) < 0) nextErrors.currentOccupancy = true;
 
@@ -77,6 +98,8 @@ const ManageEvacuation = () => {
     setCurrentOccupancy('');
     setEventId('');
     setLocation('');
+    setLatitude('');
+    setLongitude('');
     setManager('');
     setErrors({});
     setEditingCenterId('');
@@ -92,6 +115,14 @@ const ManageEvacuation = () => {
     setEventId(center.event_id || '');
     setFacilityName(center.name || '');
     setLocation(center.location || '');
+    if (center.latitude != null && center.longitude != null) {
+      setLatitude(String(center.latitude));
+      setLongitude(String(center.longitude));
+    } else {
+      const parsed = parseCoordinatePair(center.location || '');
+      setLatitude(parsed?.lat || '');
+      setLongitude(parsed?.lng || '');
+    }
     setCapacity(center.capacity ? String(center.capacity) : '');
     setCurrentOccupancy(center.current_occupancy ? String(center.current_occupancy) : '');
     setManager(center.managing_personnel || '');
@@ -126,10 +157,13 @@ const ManageEvacuation = () => {
     if (!validateShelter()) return;
     setIsSubmitting(true);
     try {
+      const normalizedLocation = `${latitude}, ${longitude}`;
       const payload = {
         event_id: eventId,
         name: facilityName,
-        location,
+        location: normalizedLocation,
+        latitude: Number.parseFloat(latitude),
+        longitude: Number.parseFloat(longitude),
         capacity: Number(capacity),
         current_occupancy: currentOccupancy ? Number(currentOccupancy) : 0,
         managing_personnel: manager,
@@ -273,6 +307,38 @@ const ManageEvacuation = () => {
             }}
             aria-invalid={!!errors.location}
           />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+          <div className="labs-form-group">
+            <label>Latitude</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              className={`labs-input${errors.latitude ? ' is-invalid' : ''}`}
+              placeholder="e.g. 14.5995"
+              value={latitude}
+              onChange={(e) => {
+                setLatitude(coordinateOnly(e.target.value, 12));
+                if (errors.latitude) setErrors((prev) => ({ ...prev, latitude: false }));
+              }}
+              aria-invalid={!!errors.latitude}
+            />
+          </div>
+          <div className="labs-form-group">
+            <label>Longitude</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              className={`labs-input${errors.longitude ? ' is-invalid' : ''}`}
+              placeholder="e.g. 120.9842"
+              value={longitude}
+              onChange={(e) => {
+                setLongitude(coordinateOnly(e.target.value, 12));
+                if (errors.longitude) setErrors((prev) => ({ ...prev, longitude: false }));
+              }}
+              aria-invalid={!!errors.longitude}
+            />
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div className="labs-form-group">

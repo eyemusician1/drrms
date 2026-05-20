@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "maplibre-gl": "^5.24.0",
     "mongodb": "^7.2.0"
   }
 }
