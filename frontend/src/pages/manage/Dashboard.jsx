@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown'; // <-- Added
+import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
 import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
@@ -20,8 +23,18 @@ const Dashboard = () => {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const { data: reportData } = useRealtimeStream('/api/v1/stream/reports', null);
   const { data: warningsData, setData: setWarningsData } = useRealtimeStream('/api/v1/stream/warnings', []);
+  const { data: disasterData } = useRealtimeStream('/api/v1/stream/disasters', []);
+  const { data: evacuationData } = useRealtimeStream('/api/v1/stream/evacuation', []);
   const { request } = useApi();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const mapContainerRef = useRef(null);
+  const mapRef = useRef(null);
+  const mapReadyRef = useRef(false);
+  const hasFitBoundsRef = useRef(false);
+  const [eventFeatures, setEventFeatures] = useState([]);
+  const [centerFeatures, setCenterFeatures] = useState([]);
+  const [routeFeature, setRouteFeature] = useState(null);
+  const philippinesBounds = [[116.0, 4.2], [127.7, 21.3]];
 
   const hashToPercent = (value, offset) => {
     const seed = `${value}-${offset}`;
@@ -53,6 +66,85 @@ const Dashboard = () => {
     };
   });
 
+  const routeCacheRef = useRef(new Map());
+
+  const haversineDistance = (a, b) => {
+    const toRad = (value) => (value * Math.PI) / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const lat1 = toRad(a.lat);
+    const lat2 = toRad(b.lat);
+    const h = Math.sin(dLat / 2) ** 2
+      + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.asin(Math.sqrt(h));
+  };
+
+  const fetchRoute = async (origin, destination) => {
+    if (!origin || !destination) return null;
+    const key = `${origin.lat},${origin.lng}-${destination.lat},${destination.lng}`;
+    const cached = routeCacheRef.current.get(key);
+    if (cached) return cached;
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+      const response = await fetch(url);
+      const json = await response.json();
+      const geometry = json?.routes?.[0]?.geometry;
+      if (!geometry) return null;
+      const feature = {
+        type: 'Feature',
+        geometry,
+        properties: {},
+      };
+      routeCacheRef.current.set(key, feature);
+      return feature;
+    } catch (err) {
+      return null;
+    }
+  };
+
+  const buildEventFeatures = (events) => {
+    const list = Array.isArray(events) ? events.slice(0, 120) : [];
+    const sorted = [...list].sort((a, b) => {
+      const aTime = new Date(a.created_at || a.date_occurred || 0).getTime();
+      const bTime = new Date(b.created_at || b.date_occurred || 0).getTime();
+      return bTime - aTime;
+    });
+    const latest = sorted[0];
+    return sorted
+      .filter((event) => Number.isFinite(event.latitude) && Number.isFinite(event.longitude))
+      .map((event) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [event.longitude, event.latitude] },
+        properties: {
+          id: event.id || event._id || '',
+          label: event.disaster_type || 'Event',
+          severity: event.severity_level || 'Moderate',
+          kind: 'event',
+          is_latest: latest ? (latest.id || latest._id) === (event.id || event._id) : false,
+        },
+      }));
+  };
+
+  const buildCenterFeatures = (centers) => {
+    const list = Array.isArray(centers) ? centers.slice(0, 120) : [];
+    return list
+      .filter((center) => Number.isFinite(center.latitude) && Number.isFinite(center.longitude))
+      .map((center) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [center.longitude, center.latitude] },
+        properties: {
+          id: center.id || center._id || '',
+          label: center.name || 'Center',
+          kind: 'center',
+        },
+      }));
+  };
+
+  const featureCollection = (features) => ({
+    type: 'FeatureCollection',
+    features: Array.isArray(features) ? features : [],
+  });
+
 
   const pushToast = (message, type = 'info') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -64,6 +156,318 @@ const Dashboard = () => {
   };
 
   const sanitizeText = (value) => sanitizeTextInput(value, 300).trim();
+
+  useEffect(() => {
+    const events = buildEventFeatures(disasterData || reportData?.recent?.disaster_events || []);
+    setEventFeatures(events);
+  }, [disasterData, reportData]);
+
+  useEffect(() => {
+    const centers = buildCenterFeatures(evacuationData || []);
+    setCenterFeatures(centers);
+  }, [evacuationData]);
+
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return undefined;
+
+    const map = new maplibregl.Map({
+      container: mapContainerRef.current,
+      style: {
+        version: 8,
+        sources: {
+          osm: {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256,
+            attribution: '&copy; OpenStreetMap contributors',
+          },
+        },
+        layers: [
+          { id: 'osm', type: 'raster', source: 'osm' },
+        ],
+      },
+      center: [121.0, 14.6],
+      zoom: 5.2,
+      minZoom: 4.5,
+      maxZoom: 16,
+      maxBounds: philippinesBounds,
+      renderWorldCopies: false,
+      attributionControl: true,
+    });
+
+    mapRef.current = map;
+
+    const handleResize = () => map.resize();
+    window.addEventListener('resize', handleResize);
+
+    map.on('load', () => {
+      mapReadyRef.current = true;
+
+      map.addSource('events', {
+        type: 'geojson',
+        data: featureCollection([]),
+        cluster: true,
+        clusterRadius: 50,
+        clusterMaxZoom: 12,
+      });
+
+      map.addSource('centers', {
+        type: 'geojson',
+        data: featureCollection([]),
+        cluster: true,
+        clusterRadius: 50,
+        clusterMaxZoom: 12,
+      });
+
+      map.addSource('route', {
+        type: 'geojson',
+        data: featureCollection([]),
+      });
+
+      map.addLayer({
+        id: 'event-clusters',
+        type: 'circle',
+        source: 'events',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': 'rgba(255,255,255,0.12)',
+          'circle-radius': ['step', ['get', 'point_count'], 14, 10, 18, 30, 26],
+          'circle-stroke-color': 'rgba(255,255,255,0.4)',
+          'circle-stroke-width': 1,
+          'circle-opacity-transition': { duration: 300 },
+          'circle-radius-transition': { duration: 300 },
+        },
+      });
+
+      map.addLayer({
+        id: 'event-cluster-count',
+        type: 'symbol',
+        source: 'events',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-size': 12,
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-opacity': 0.8,
+        },
+      });
+
+      map.addLayer({
+        id: 'event-points',
+        type: 'circle',
+        source: 'events',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-radius': 5,
+          'circle-color': [
+            'match',
+            ['get', 'severity'],
+            'Critical', '#ffffff',
+            'High', 'rgba(255,255,255,0.8)',
+            'Moderate', 'rgba(255,255,255,0.55)',
+            'Low', 'rgba(255,255,255,0.35)',
+            'rgba(255,255,255,0.5)'
+          ],
+          'circle-stroke-color': 'rgba(255,255,255,0.4)',
+          'circle-stroke-width': 1,
+          'circle-opacity-transition': { duration: 300 },
+          'circle-radius-transition': { duration: 300 },
+        },
+      });
+
+      map.addLayer({
+        id: 'event-latest-ring',
+        type: 'circle',
+        source: 'events',
+        filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'is_latest'], true]],
+        paint: {
+          'circle-radius': 16,
+          'circle-color': 'rgba(255,255,255,0.05)',
+          'circle-stroke-color': 'rgba(255,255,255,0.7)',
+          'circle-stroke-width': 1,
+          'circle-opacity': 0.8,
+          'circle-opacity-transition': { duration: 400 },
+        },
+      });
+
+      map.addLayer({
+        id: 'event-labels',
+        type: 'symbol',
+        source: 'events',
+        filter: ['!', ['has', 'point_count']],
+        minzoom: 8,
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': 11,
+          'text-offset': [0, 1.2],
+        },
+        paint: {
+          'text-color': '#e2e8f0',
+          'text-opacity': 0.7,
+        },
+      });
+
+      map.addLayer({
+        id: 'center-clusters',
+        type: 'circle',
+        source: 'centers',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': 'rgba(168,199,250,0.2)',
+          'circle-radius': ['step', ['get', 'point_count'], 14, 10, 18, 30, 26],
+          'circle-stroke-color': 'rgba(168,199,250,0.6)',
+          'circle-stroke-width': 1,
+          'circle-opacity-transition': { duration: 300 },
+          'circle-radius-transition': { duration: 300 },
+        },
+      });
+
+      map.addLayer({
+        id: 'center-cluster-count',
+        type: 'symbol',
+        source: 'centers',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-size': 12,
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-opacity': 0.9,
+        },
+      });
+
+      map.addLayer({
+        id: 'center-points',
+        type: 'circle',
+        source: 'centers',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-radius': 5,
+          'circle-color': 'rgba(168,199,250,0.85)',
+          'circle-stroke-color': 'rgba(168,199,250,0.9)',
+          'circle-stroke-width': 1,
+          'circle-opacity-transition': { duration: 300 },
+          'circle-radius-transition': { duration: 300 },
+        },
+      });
+
+      map.addLayer({
+        id: 'center-labels',
+        type: 'symbol',
+        source: 'centers',
+        filter: ['!', ['has', 'point_count']],
+        minzoom: 8,
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': 11,
+          'text-offset': [0, 1.2],
+        },
+        paint: {
+          'text-color': '#a8c7fa',
+          'text-opacity': 0.8,
+        },
+      });
+
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        paint: {
+          'line-color': 'rgba(168,199,250,0.9)',
+          'line-width': 3,
+          'line-opacity': 0.85,
+          'line-opacity-transition': { duration: 400 },
+        },
+      });
+    });
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      mapReadyRef.current = false;
+      map.remove();
+      mapRef.current = null;
+      hasFitBoundsRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapReadyRef.current || !mapRef.current) return;
+    const source = mapRef.current.getSource('events');
+    if (source?.setData) {
+      source.setData(featureCollection(eventFeatures));
+    }
+  }, [eventFeatures]);
+
+  useEffect(() => {
+    if (!mapReadyRef.current || !mapRef.current) return;
+    const source = mapRef.current.getSource('centers');
+    if (source?.setData) {
+      source.setData(featureCollection(centerFeatures));
+    }
+  }, [centerFeatures]);
+
+  useEffect(() => {
+    if (!mapReadyRef.current || !mapRef.current || hasFitBoundsRef.current) return;
+    const points = [...eventFeatures, ...centerFeatures];
+    if (!points.length) return;
+    const bounds = points.reduce((acc, feature) => {
+      const [lng, lat] = feature.geometry.coordinates;
+      return acc.extend([lng, lat]);
+    }, new maplibregl.LngLatBounds(points[0].geometry.coordinates, points[0].geometry.coordinates));
+    mapRef.current.fitBounds(bounds, { padding: 60, duration: 800, maxZoom: 9 });
+    hasFitBoundsRef.current = true;
+  }, [eventFeatures, centerFeatures]);
+
+  useEffect(() => {
+    let isActive = true;
+    const buildRoute = async () => {
+      if (!eventFeatures.length || !centerFeatures.length) {
+        if (isActive) setRouteFeature(null);
+        return;
+      }
+      const origin = eventFeatures.find((feature) => feature.properties?.is_latest) || eventFeatures[0];
+      const originCoords = {
+        lat: origin.geometry.coordinates[1],
+        lng: origin.geometry.coordinates[0],
+      };
+      let nearest = null;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      centerFeatures.forEach((feature) => {
+        const coords = {
+          lat: feature.geometry.coordinates[1],
+          lng: feature.geometry.coordinates[0],
+        };
+        const distance = haversineDistance(originCoords, coords);
+        if (distance < nearestDistance) {
+          nearest = coords;
+          nearestDistance = distance;
+        }
+      });
+      if (!nearest) {
+        if (isActive) setRouteFeature(null);
+        return;
+      }
+      const route = await fetchRoute(originCoords, nearest);
+      if (isActive) setRouteFeature(route);
+    };
+    buildRoute();
+    return () => {
+      isActive = false;
+    };
+  }, [eventFeatures, centerFeatures]);
+
+  useEffect(() => {
+    if (!mapReadyRef.current || !mapRef.current) return;
+    const source = mapRef.current.getSource('route');
+    if (source?.setData) {
+      source.setData(routeFeature ? featureCollection([routeFeature]) : featureCollection([]));
+    }
+  }, [routeFeature]);
 
   const validateAlert = () => {
     const nextErrors = {};
@@ -270,14 +674,7 @@ const Dashboard = () => {
           </div>
 
           <div className="map-panel">
-            <div className="map-grid-overlay"></div>
-            {recentEvents.map(event => (
-              <div key={`map-${event.id}`} className={`map-blip severity-${event.severity.toLowerCase()}`} style={{ left: `${event.x}%`, top: `${event.y}%` }}>
-                <div className="blip-core"></div>
-                <div className="blip-ring"></div>
-                <div className="blip-label">{event.type}</div>
-              </div>
-            ))}
+            <div ref={mapContainerRef} className="realtime-map" />
           </div>
         </div>
       </div>
@@ -317,17 +714,12 @@ const Dashboard = () => {
         </div>
         <div className="labs-form-group">
           <label>Target Region</label>
-          <input
-            type="text"
-            className={`labs-input${errors.targetRegion ? ' is-invalid' : ''}`}
-            placeholder="e.g. Sector 7, Plaridel"
-            value={targetRegion}
-            maxLength={120}
-            onChange={(e) => {
-              setTargetRegion(sanitizeTextInput(e.target.value, 120));
+          <PhilippinesLocationPicker
+            label=""
+            onChange={(value) => {
+              setTargetRegion(value);
               if (errors.targetRegion) setErrors((prev) => ({ ...prev, targetRegion: false }));
             }}
-            aria-invalid={!!errors.targetRegion}
           />
         </div>
         <div className="labs-form-group">
