@@ -4,6 +4,7 @@ import LabsDropdown from '../../components/ui/LabsDropdown';
 import Toast from '../../components/ui/Toast'; // <-- Import Toast
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
+import { digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
 import './ManagePages.css';
 
 const ManageRelief = () => {
@@ -59,7 +60,7 @@ const ManageRelief = () => {
     setToasts([]);
   };
 
-  const sanitizeText = (value) => value.replace(/[<>]/g, '').trim();
+  const sanitizeText = (value) => sanitizeTextInput(value, 200).trim();
 
   const validateSupply = () => {
     const nextErrors = {};
@@ -299,14 +300,15 @@ const ManageRelief = () => {
           <div className="labs-form-group">
             <label>Beneficiaries</label>
             <input
-              type="number"
-              min="0"
-              onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               className={`labs-input${errors.beneficiaries ? ' is-invalid' : ''}`}
               placeholder="0"
               value={beneficiaries}
+              maxLength={9}
               onChange={(e) => {
-                setBeneficiaries(e.target.value);
+                setBeneficiaries(digitsOnly(e.target.value, 9));
                 if (errors.beneficiaries) setErrors((prev) => ({ ...prev, beneficiaries: false }));
               }}
               aria-invalid={!!errors.beneficiaries}
@@ -322,7 +324,7 @@ const ManageRelief = () => {
             value={resourcesDistributed}
             maxLength={200}
             onChange={(e) => {
-              setResourcesDistributed(e.target.value);
+              setResourcesDistributed(sanitizeTextInput(e.target.value, 200, 12));
               if (errors.resourcesDistributed) setErrors((prev) => ({ ...prev, resourcesDistributed: false }));
             }}
             aria-invalid={!!errors.resourcesDistributed}
@@ -335,7 +337,8 @@ const ManageRelief = () => {
             className="labs-input"
             placeholder="Response Team ID"
             value={handledByTeamId}
-            onChange={(e) => setHandledByTeamId(e.target.value)}
+            maxLength={80}
+            onChange={(e) => setHandledByTeamId(sanitizeTextInput(e.target.value, 80, 4))}
           />
         </div>
       </Modal>

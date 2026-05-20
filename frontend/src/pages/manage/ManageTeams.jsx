@@ -4,6 +4,7 @@ import LabsDropdown from '../../components/ui/LabsDropdown';
 import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
+import { sanitizeTextInput } from '../../utils/formGuards';
 import './ManagePages.css';
 
 const ManageTeams = () => {
@@ -78,7 +79,7 @@ const ManageTeams = () => {
     setToasts([]);
   };
 
-  const sanitizeText = (value) => value.replace(/[<>]/g, '').trim();
+  const sanitizeText = (value) => sanitizeTextInput(value, 200).trim();
 
   const validateTeam = () => {
     const nextErrors = {};
@@ -287,7 +288,7 @@ const ManageTeams = () => {
             value={unitName}
             maxLength={120}
             onChange={(e) => {
-              setUnitName(e.target.value);
+                setUnitName(sanitizeTextInput(e.target.value, 120, 8));
               if (errors.unitName) setErrors((prev) => ({ ...prev, unitName: false }));
             }}
             aria-invalid={!!errors.unitName}
@@ -302,7 +303,7 @@ const ManageTeams = () => {
             value={contact}
             maxLength={120}
             onChange={(e) => {
-              setContact(e.target.value);
+                setContact(sanitizeTextInput(e.target.value, 120, 8));
               if (errors.contact) setErrors((prev) => ({ ...prev, contact: false }));
             }}
             aria-invalid={!!errors.contact}
@@ -338,7 +339,7 @@ const ManageTeams = () => {
         </div>
         <div className="labs-form-grid">
           <div className="labs-form-group">
-            <label>Assigned Event ID (Optional)</label>
+            <label>Assigned Event</label>
             <LabsDropdown
               options={eventOptions}
               value={assignedEventId}
@@ -353,7 +354,8 @@ const ManageTeams = () => {
               className="labs-input"
               placeholder="Zone / Area"
               value={operationZone}
-              onChange={(e) => setOperationZone(e.target.value)}
+              maxLength={120}
+              onChange={(e) => setOperationZone(sanitizeTextInput(e.target.value, 120, 8))}
             />
           </div>
         </div>

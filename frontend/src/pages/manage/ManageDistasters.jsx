@@ -4,6 +4,7 @@ import LabsDropdown from '../../components/ui/LabsDropdown';
 import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
+import { digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
 import './ManagePages.css';
 
 const ManageDisasters = () => {
@@ -47,7 +48,7 @@ const ManageDisasters = () => {
     setToasts([]);
   };
 
-  const sanitizeText = (value) => value.replace(/[<>]/g, '').trim();
+  const sanitizeText = (value) => sanitizeTextInput(value, 200).trim();
 
   const validateIncident = () => {
     const nextErrors = {};
@@ -265,7 +266,7 @@ const ManageDisasters = () => {
               value={epicenter}
               maxLength={120}
               onChange={(e) => {
-                setEpicenter(e.target.value);
+                setEpicenter(sanitizeTextInput(e.target.value, 120));
                 if (errors.epicenter) setErrors((prev) => ({ ...prev, epicenter: false }));
               }}
               aria-invalid={!!errors.epicenter}
@@ -289,13 +290,13 @@ const ManageDisasters = () => {
           <div className="labs-form-group">
             <label>Duration (Days)</label>
             <input
-              type="number"
-              min="0"
-              onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               className="labs-input"
               placeholder="Optional"
               value={durationDays}
-              onChange={(e) => setDurationDays(e.target.value)}
+              onChange={(e) => setDurationDays(digitsOnly(e.target.value, 3))}
             />
           </div>
         </div>
