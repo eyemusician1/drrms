@@ -4,6 +4,7 @@ import LabsDropdown from '../../components/ui/LabsDropdown';
 import Toast from '../../components/ui/Toast'; // <-- Import Toast
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
+import { digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
 import './ManagePages.css';
 
 const ManageEvacuation = () => {
@@ -51,7 +52,7 @@ const ManageEvacuation = () => {
     setToasts([]);
   };
 
-  const sanitizeText = (value) => value.replace(/[<>]/g, '').trim();
+  const sanitizeText = (value) => sanitizeTextInput(value, 200).trim();
 
   const validateShelter = () => {
     const nextErrors = {};
@@ -252,7 +253,7 @@ const ManageEvacuation = () => {
             value={facilityName}
             maxLength={120}
             onChange={(e) => {
-              setFacilityName(e.target.value);
+              setFacilityName(sanitizeTextInput(e.target.value, 120));
               if (errors.facilityName) setErrors((prev) => ({ ...prev, facilityName: false }));
             }}
             aria-invalid={!!errors.facilityName}
@@ -267,7 +268,7 @@ const ManageEvacuation = () => {
             value={location}
             maxLength={160}
             onChange={(e) => {
-              setLocation(e.target.value);
+              setLocation(sanitizeTextInput(e.target.value, 160));
               if (errors.location) setErrors((prev) => ({ ...prev, location: false }));
             }}
             aria-invalid={!!errors.location}
@@ -278,14 +279,14 @@ const ManageEvacuation = () => {
             <label>Maximum Capacity (Pax)</label>
             {/* NO NEGATIVE NUMBERS FIX */}
             <input
-              type="number"
-              min="1"
-              onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               className={`labs-input${errors.capacity ? ' is-invalid' : ''}`}
               placeholder="0"
               value={capacity}
               onChange={(e) => {
-                setCapacity(e.target.value);
+                setCapacity(digitsOnly(e.target.value, 5));
                 if (errors.capacity) setErrors((prev) => ({ ...prev, capacity: false }));
               }}
               aria-invalid={!!errors.capacity}
@@ -294,14 +295,19 @@ const ManageEvacuation = () => {
           <div className="labs-form-group">
             <label>Current Occupancy</label>
             <input
-              type="number"
-              min="0"
-              onKeyDown={(e) => { if (e.key === '-' || e.key === 'e') e.preventDefault(); }}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
               className={`labs-input${errors.currentOccupancy ? ' is-invalid' : ''}`}
               placeholder="0"
               value={currentOccupancy}
               onChange={(e) => {
-                setCurrentOccupancy(e.target.value);
+                const nextValue = digitsOnly(e.target.value, 5);
+                if (capacity && Number(nextValue) > Number(capacity)) {
+                  setCurrentOccupancy(capacity);
+                  return;
+                }
+                setCurrentOccupancy(nextValue);
                 if (errors.currentOccupancy) setErrors((prev) => ({ ...prev, currentOccupancy: false }));
               }}
               aria-invalid={!!errors.currentOccupancy}
@@ -317,7 +323,7 @@ const ManageEvacuation = () => {
             value={manager}
             maxLength={120}
             onChange={(e) => {
-              setManager(e.target.value);
+              setManager(sanitizeTextInput(e.target.value, 120));
               if (errors.manager) setErrors((prev) => ({ ...prev, manager: false }));
             }}
             aria-invalid={!!errors.manager}

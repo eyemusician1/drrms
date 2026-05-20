@@ -139,6 +139,9 @@
   letter-spacing: 1px;
   font-weight: 600;
   margin-left: 4px;
+  min-height: 2.2em;
+  display: flex;
+  align-items: flex-end;
 }
 
 .labs-input {
@@ -184,6 +187,7 @@
   align-items: center;
   cursor: pointer;
   user-select: none;
+  min-height: 56px;
 }
 
 .labs-dropdown-trigger.active {

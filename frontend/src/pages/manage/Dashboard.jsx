@@ -4,6 +4,7 @@ import LabsDropdown from '../../components/ui/LabsDropdown'; // <-- Added
 import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
+import { sanitizeTextInput } from '../../utils/formGuards';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -62,7 +63,7 @@ const Dashboard = () => {
     setToasts([]);
   };
 
-  const sanitizeText = (value) => value.replace(/[<>]/g, '').trim();
+  const sanitizeText = (value) => sanitizeTextInput(value, 300).trim();
 
   const validateAlert = () => {
     const nextErrors = {};
@@ -323,7 +324,7 @@ const Dashboard = () => {
             value={targetRegion}
             maxLength={120}
             onChange={(e) => {
-              setTargetRegion(e.target.value);
+              setTargetRegion(sanitizeTextInput(e.target.value, 120));
               if (errors.targetRegion) setErrors((prev) => ({ ...prev, targetRegion: false }));
             }}
             aria-invalid={!!errors.targetRegion}
@@ -339,7 +340,7 @@ const Dashboard = () => {
             value={telemetryMessage}
             maxLength={300}
             onChange={(e) => {
-              setTelemetryMessage(e.target.value);
+              setTelemetryMessage(sanitizeTextInput(e.target.value, 300));
               if (errors.telemetryMessage) setErrors((prev) => ({ ...prev, telemetryMessage: false }));
             }}
             aria-invalid={!!errors.telemetryMessage}
