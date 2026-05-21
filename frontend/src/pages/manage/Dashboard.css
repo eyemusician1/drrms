@@ -147,22 +147,32 @@
 .telemetry-layout {
   flex: 1;
   display: flex;
+  flex-direction: column;
   gap: 24px;
-  min-height: 0; /* Crucial for inner scrolling */
+  min-height: 0;
 }
 
-/* --- LEFT: FEED PANEL --- */
+/* --- TOP: FEED PANEL --- */
 .feed-panel {
-  flex: 0 0 380px; /* Fixed width for the list */
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  max-height: 320px;
+  overflow: hidden;
+}
+
+.feed-column {
   display: flex;
   flex-direction: column;
-  overflow-y: auto; /* Scroll ONLY this list */
+  min-height: 0;
+  overflow-y: auto;
   padding-right: 8px;
 }
 
-.feed-panel::-webkit-scrollbar { width: 4px; }
-.feed-panel::-webkit-scrollbar-track { background: transparent; }
-.feed-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+.feed-column::-webkit-scrollbar { width: 4px; }
+.feed-column::-webkit-scrollbar-track { background: transparent; }
+.feed-column::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
 
 .incident-list {
   display: flex;
@@ -181,6 +191,17 @@
 
 .incident-row:hover {
   background: rgba(255, 255, 255, 0.05);
+}
+
+.incident-row.is-selected {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.45);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25);
+}
+
+.incident-row.is-locating {
+  opacity: 0.85;
+  pointer-events: wait;
 }
 
 .incident-row-header {
@@ -241,10 +262,12 @@
 .severity-high .severity-badge { color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.5); padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; }
 .severity-moderate .severity-badge { color: #71717a; border: 1px solid rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 12px; font-size: 0.7rem; }
 
-/* --- RIGHT: MINIMALIST MAP PANEL --- */
+/* --- BOTTOM: FULL-WIDTH MAP PANEL --- */
 .map-panel {
   flex: 1;
   position: relative;
+  min-height: 480px;
+  height: clamp(420px, 52vh, 720px);
   border-radius: 24px;
   background: #0a0a0a;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -290,13 +313,18 @@
     justify-content: flex-start;
   }
 
-  .telemetry-layout {
-    flex-direction: column;
+  .feed-panel {
+    grid-template-columns: 1fr;
+    max-height: none;
   }
 
-  .feed-panel {
-    flex: 1;
-    padding-right: 0;
+  .feed-column {
+    max-height: 240px;
+  }
+
+  .map-panel {
+    min-height: 360px;
+    height: 45vh;
   }
 }
 

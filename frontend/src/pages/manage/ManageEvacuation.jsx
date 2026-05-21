@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
+import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
 import Toast from '../../components/ui/Toast'; // <-- Import Toast
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
 import { coordinateOnly, digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
+import { locationFieldsFromDetail, toPickerValue } from '../../utils/locationValue';
+import { isWithinPhilippines } from '../../utils/philippinesGeo';
 import './ManagePages.css';
 
 const ManageEvacuation = () => {
@@ -14,6 +17,8 @@ const ManageEvacuation = () => {
   const [currentOccupancy, setCurrentOccupancy] = useState('');
   const [eventId, setEventId] = useState('');
   const [location, setLocation] = useState('');
+  const [locationDetail, setLocationDetail] = useState(null);
+  const [pickerValue, setPickerValue] = useState(null);
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [manager, setManager] = useState('');
@@ -79,14 +84,19 @@ const ManageEvacuation = () => {
     if (!sanitizeText(location)) nextErrors.location = true;
     if (!sanitizeText(facilityName)) nextErrors.facilityName = true;
     if (!sanitizeText(manager)) nextErrors.manager = true;
-    if (!isValidLat(latitude)) nextErrors.latitude = true;
-    if (!isValidLng(longitude)) nextErrors.longitude = true;
+    if (!isValidLat(latitude) || !isWithinPhilippines(latitude, longitude)) nextErrors.latitude = true;
+    if (!isValidLng(longitude) || !isWithinPhilippines(latitude, longitude)) nextErrors.longitude = true;
     if (!capacity || Number(capacity) <= 0) nextErrors.capacity = true;
     if (currentOccupancy !== '' && Number(currentOccupancy) < 0) nextErrors.currentOccupancy = true;
 
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
-      pushToast('Please fill out all required fields.', 'warning');
+      pushToast(
+        nextErrors.latitude || nextErrors.longitude
+          ? 'Location must be within the Philippines with valid coordinates.'
+          : 'Please fill out all required fields.',
+        'warning'
+      );
       return false;
     }
     return true;
@@ -98,6 +108,8 @@ const ManageEvacuation = () => {
     setCurrentOccupancy('');
     setEventId('');
     setLocation('');
+    setLocationDetail(null);
+    setPickerValue(null);
     setLatitude('');
     setLongitude('');
     setManager('');
@@ -115,6 +127,8 @@ const ManageEvacuation = () => {
     setEventId(center.event_id || '');
     setFacilityName(center.name || '');
     setLocation(center.location || '');
+    setLocationDetail(locationFieldsFromDetail(center));
+    setPickerValue(toPickerValue(center));
     if (center.latitude != null && center.longitude != null) {
       setLatitude(String(center.latitude));
       setLongitude(String(center.longitude));
@@ -157,11 +171,12 @@ const ManageEvacuation = () => {
     if (!validateShelter()) return;
     setIsSubmitting(true);
     try {
-      const normalizedLocation = `${latitude}, ${longitude}`;
+      const normalizedLocation = location || `${latitude}, ${longitude}`;
       const payload = {
         event_id: eventId,
         name: facilityName,
         location: normalizedLocation,
+        ...locationFieldsFromDetail(locationDetail),
         latitude: Number.parseFloat(latitude),
         longitude: Number.parseFloat(longitude),
         capacity: Number(capacity),
@@ -293,21 +308,20 @@ const ManageEvacuation = () => {
             aria-invalid={!!errors.facilityName}
           />
         </div>
-        <div className="labs-form-group">
-          <label>Location</label>
-          <input
-            type="text"
-            className={`labs-input${errors.location ? ' is-invalid' : ''}`}
-            placeholder="Address or Zone"
-            value={location}
-            maxLength={160}
-            onChange={(e) => {
-              setLocation(sanitizeTextInput(e.target.value, 160));
-              if (errors.location) setErrors((prev) => ({ ...prev, location: false }));
-            }}
-            aria-invalid={!!errors.location}
-          />
-        </div>
+        <PhilippinesLocationPicker
+          value={pickerValue}
+          onChange={(value) => {
+            setLocation(value);
+            if (errors.location) setErrors((prev) => ({ ...prev, location: false }));
+          }}
+          onLocationDetail={setLocationDetail}
+          onCoordinates={(coords) => {
+            setLatitude(String(coords.lat));
+            setLongitude(String(coords.lng));
+            if (errors.latitude) setErrors((prev) => ({ ...prev, latitude: false }));
+            if (errors.longitude) setErrors((prev) => ({ ...prev, longitude: false }));
+          }}
+        />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div className="labs-form-group">
             <label>Latitude</label>

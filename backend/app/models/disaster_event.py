@@ -6,6 +6,10 @@ from datetime import datetime
 class DisasterEvent(Document):
     disaster_type: Literal["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide"]
     location: str
+    province_code: Optional[str] = None
+    city_municipality_code: Optional[str] = None
+    city_municipality_type: Optional[str] = None
+    barangay_code: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     date_occurred: datetime

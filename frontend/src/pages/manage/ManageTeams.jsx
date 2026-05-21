@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
+import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
 import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
@@ -337,28 +338,21 @@ const ManageTeams = () => {
             />
           </div>
         </div>
-        <div className="labs-form-grid">
-          <div className="labs-form-group">
-            <label>Assigned Event</label>
-            <LabsDropdown
-              options={eventOptions}
-              value={assignedEventId}
-              onChange={(value) => setAssignedEventId(value)}
-              placeholder={eventOptions.length ? 'Select event' : 'No active events'}
-            />
-          </div>
-          <div className="labs-form-group">
-            <label>Operation Zone (Optional)</label>
-            <input
-              type="text"
-              className="labs-input"
-              placeholder="Zone / Area"
-              value={operationZone}
-              maxLength={120}
-              onChange={(e) => setOperationZone(sanitizeTextInput(e.target.value, 120, 8))}
-            />
-          </div>
+        <div className="labs-form-group">
+          <label>Assigned Event</label>
+          <LabsDropdown
+            options={eventOptions}
+            value={assignedEventId}
+            onChange={(value) => setAssignedEventId(value)}
+            placeholder={eventOptions.length ? 'Select event' : 'No active events'}
+          />
         </div>
+        <PhilippinesLocationPicker
+          label="Operation Zone (Optional)"
+          includeBarangay={false}
+          autoResolveCoordinates={false}
+          onChange={(value) => setOperationZone(value)}
+        />
       </Modal>
 
       <Modal

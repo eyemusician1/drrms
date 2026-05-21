@@ -8,6 +8,12 @@ import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
 import { sanitizeTextInput } from '../../utils/formGuards';
+import { geocodePhilippinesPlace, parseCoordinatesFromText } from '../../services/geocode';
+import {
+  PHILIPPINES_BOUNDS,
+  PHILIPPINES_CENTER,
+  PHILIPPINES_DEFAULT_ZOOM,
+} from '../../utils/philippinesGeo';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -34,16 +40,10 @@ const Dashboard = () => {
   const [eventFeatures, setEventFeatures] = useState([]);
   const [centerFeatures, setCenterFeatures] = useState([]);
   const [routeFeature, setRouteFeature] = useState(null);
-  const philippinesBounds = [[116.0, 4.2], [127.7, 21.3]];
-
-  const hashToPercent = (value, offset) => {
-    const seed = `${value}-${offset}`;
-    let hash = 0;
-    for (let i = 0; i < seed.length; i += 1) {
-      hash = (hash * 31 + seed.charCodeAt(i)) % 100;
-    }
-    return Math.max(8, Math.min(92, hash));
-  };
+  const [highlightFeature, setHighlightFeature] = useState(null);
+  const [selectedFeedKey, setSelectedFeedKey] = useState('');
+  const [isLocatingFeed, setIsLocatingFeed] = useState(false);
+  const philippinesBounds = PHILIPPINES_BOUNDS;
 
   const totals = reportData?.totals || {};
   const statistics = [
@@ -53,18 +53,37 @@ const Dashboard = () => {
     { label: 'Relief Kits', value: String(totals.relief_operations ?? 0).padStart(2, '0') },
   ];
 
-  const recentEvents = (reportData?.recent?.disaster_events || []).map((event) => {
-    const id = event.id || event._id || 'DR-000';
-    return {
-      id,
-      type: event.disaster_type || 'Unknown',
-      zone: event.location || 'Unknown Area',
-      severity: event.severity_level || 'Moderate',
-      status: event.status || 'Ongoing',
-      x: hashToPercent(id, 13),
-      y: hashToPercent(id, 47),
-    };
-  });
+  const normalizeId = (raw) => {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'object' && raw.$oid) return raw.$oid;
+  return String(raw);
+};
+
+  const disasterList = useMemo(
+    () => (Array.isArray(disasterData) && disasterData.length
+      ? disasterData
+      : (reportData?.recent?.disaster_events || [])),
+    [disasterData, reportData]
+  );
+
+  const recentEvents = useMemo(() => disasterList.map((event) => {
+  const id = normalizeId(event.id || event._id);
+  return {
+    id: id || `dr-${Math.random().toString(36).slice(2)}`,
+    type: event.disaster_type || 'Unknown',
+    zone: event.location || 'Unknown Area',
+    severity: event.severity_level || 'Moderate',
+    status: event.status || 'Ongoing',
+    latitude: typeof event.latitude === 'number' ? event.latitude : null,
+    longitude: typeof event.longitude === 'number' ? event.longitude : null,
+    raw: event,
+  };
+}), [disasterList]);
+
+  const findDisasterById = (eventId) => disasterList.find(
+    (item) => normalizeId(item.id || item._id) === normalizeId(eventId)
+  );
 
   const routeCacheRef = useRef(new Map());
 
@@ -116,11 +135,13 @@ const Dashboard = () => {
         type: 'Feature',
         geometry: { type: 'Point', coordinates: [event.longitude, event.latitude] },
         properties: {
-          id: event.id || event._id || '',
+          id: normalizeId(event.id || event._id),
           label: event.disaster_type || 'Event',
           severity: event.severity_level || 'Moderate',
           kind: 'event',
-          is_latest: latest ? (latest.id || latest._id) === (event.id || event._id) : false,
+          is_latest: latest
+            ? normalizeId(latest.id || latest._id) === normalizeId(event.id || event._id)
+            : false,
         },
       }));
   };
@@ -145,6 +166,120 @@ const Dashboard = () => {
     features: Array.isArray(features) ? features : [],
   });
 
+
+  const parseRegionParts = (region) => {
+    const parts = String(region || '').split(',').map((p) => p.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      return { barangay: parts[0], city: parts[1], province: parts.slice(2).join(', ') };
+    }
+    if (parts.length === 2) {
+      return { city: parts[0], province: parts[1] };
+    }
+    if (parts.length === 1) {
+      return { city: parts[0] };
+    }
+    return {};
+  };
+
+  const findDisasterByRegion = (region) => {
+    const needle = String(region || '').trim().toLowerCase();
+    if (!needle) return null;
+    const parts = needle.split(',').map((p) => p.trim()).filter(Boolean);
+    const scored = disasterList
+      .map((event) => {
+        const location = String(event.location || '').toLowerCase();
+        let score = 0;
+        if (location === needle) score += 100;
+        if (location.includes(needle)) score += 50;
+        parts.forEach((part) => {
+          if (part && location.includes(part)) score += 20;
+        });
+        return { event, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score);
+    return scored[0]?.event || null;
+  };
+
+  const coordsFromDisaster = (event) => {
+    if (!event) return null;
+    const lat = typeof event.latitude === 'number' ? event.latitude : parseFloat(event.latitude);
+    const lng = typeof event.longitude === 'number' ? event.longitude : parseFloat(event.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return {
+      lat,
+      lng,
+      label: event.location || event.disaster_type || 'Incident',
+    };
+  };
+
+  const flyToCoordinates = (coords, { zoom = 13 } = {}) => {
+    if (!mapRef.current || !coords) return;
+    mapRef.current.flyTo({
+      center: [coords.lng, coords.lat],
+      zoom,
+      duration: 1400,
+      essential: true,
+    });
+    setHighlightFeature({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [coords.lng, coords.lat] },
+      properties: { label: coords.label || 'Selected' },
+    });
+  };
+
+  const resolveAlertCoordinates = async (warning) => {
+    const region = warning.region || '';
+    const fromText = parseCoordinatesFromText(region);
+    if (fromText) return fromText;
+
+    if (warning.linked_event_id) {
+      const linked = coordsFromDisaster(findDisasterById(warning.linked_event_id));
+      if (linked) return linked;
+    }
+    const matched = coordsFromDisaster(findDisasterByRegion(region));
+    if (matched) return matched;
+    return geocodePhilippinesPlace(region, parseRegionParts(region));
+  };
+
+  const resolveIncidentCoordinates = async (event) => {
+  // 1. Already have valid coords on the mapped event object
+  if (Number.isFinite(event.latitude) && Number.isFinite(event.longitude)) {
+    return { lat: event.latitude, lng: event.longitude, label: event.zone };
+  }
+
+  // 2. Try parsing from zone label string (e.g. legacy "14.5, 121.0" labels)
+  const zone = event.zone || '';
+  const fromText = parseCoordinatesFromText(zone);
+  if (fromText) return fromText;
+
+  // 3. Fall back to geocoding (network call — show loading state)
+  return geocodePhilippinesPlace(zone, parseRegionParts(zone));
+};
+
+  const handleFeedLocate = async (feedKey, resolver) => {
+    setSelectedFeedKey(feedKey);
+    setIsLocatingFeed(true);
+    try {
+      const coords = await resolver();
+      if (!coords) {
+        pushToast('Could not find that location on the map.', 'warning');
+        setHighlightFeature(null);
+        return;
+      }
+      flyToCoordinates(coords);
+    } finally {
+      setIsLocatingFeed(false);
+    }
+  };
+
+  const handleAlertClick = (alert) => {
+    handleFeedLocate(`alert:${alert.id}`, () => resolveAlertCoordinates(alert.raw));
+  };
+
+  const handleIncidentClick = (event) => {
+    handleFeedLocate(`incident:${event.id}`, () => resolveIncidentCoordinates(event));
+  };
 
   const pushToast = (message, type = 'info') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -186,8 +321,8 @@ const Dashboard = () => {
           { id: 'osm', type: 'raster', source: 'osm' },
         ],
       },
-      center: [121.0, 14.6],
-      zoom: 5.2,
+      center: [PHILIPPINES_CENTER.lng, PHILIPPINES_CENTER.lat],
+      zoom: PHILIPPINES_DEFAULT_ZOOM,
       minZoom: 4.5,
       maxZoom: 16,
       maxBounds: philippinesBounds,
@@ -224,16 +359,21 @@ const Dashboard = () => {
         data: featureCollection([]),
       });
 
+      map.addSource('highlight', {
+        type: 'geojson',
+        data: featureCollection([]),
+      });
+
       map.addLayer({
         id: 'event-clusters',
         type: 'circle',
         source: 'events',
         filter: ['has', 'point_count'],
         paint: {
-          'circle-color': 'rgba(255,255,255,0.12)',
-          'circle-radius': ['step', ['get', 'point_count'], 14, 10, 18, 30, 26],
-          'circle-stroke-color': 'rgba(255,255,255,0.4)',
-          'circle-stroke-width': 1,
+          'circle-color': 'rgba(239, 68, 68, 0.35)',
+          'circle-radius': ['step', ['get', 'point_count'], 22, 10, 28, 30, 36],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
           'circle-opacity-transition': { duration: 300 },
           'circle-radius-transition': { duration: 300 },
         },
@@ -261,18 +401,27 @@ const Dashboard = () => {
         source: 'events',
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-radius': 5,
+          'circle-radius': [
+            'match',
+            ['get', 'severity'],
+            'Critical', 14,
+            'High', 12,
+            'Moderate', 11,
+            'Low', 10,
+            11,
+          ],
           'circle-color': [
             'match',
             ['get', 'severity'],
-            'Critical', '#ffffff',
-            'High', 'rgba(255,255,255,0.8)',
-            'Moderate', 'rgba(255,255,255,0.55)',
-            'Low', 'rgba(255,255,255,0.35)',
-            'rgba(255,255,255,0.5)'
+            'Critical', '#ef4444',
+            'High', '#f97316',
+            'Moderate', '#fbbf24',
+            'Low', '#38bdf8',
+            '#f87171',
           ],
-          'circle-stroke-color': 'rgba(255,255,255,0.4)',
-          'circle-stroke-width': 1,
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 3,
+          'circle-opacity': 1,
           'circle-opacity-transition': { duration: 300 },
           'circle-radius-transition': { duration: 300 },
         },
@@ -284,11 +433,11 @@ const Dashboard = () => {
         source: 'events',
         filter: ['all', ['!', ['has', 'point_count']], ['==', ['get', 'is_latest'], true]],
         paint: {
-          'circle-radius': 16,
-          'circle-color': 'rgba(255,255,255,0.05)',
-          'circle-stroke-color': 'rgba(255,255,255,0.7)',
-          'circle-stroke-width': 1,
-          'circle-opacity': 0.8,
+          'circle-radius': 26,
+          'circle-color': 'rgba(239, 68, 68, 0.2)',
+          'circle-stroke-color': '#ef4444',
+          'circle-stroke-width': 2,
+          'circle-opacity': 1,
           'circle-opacity-transition': { duration: 400 },
         },
       });
@@ -347,10 +496,11 @@ const Dashboard = () => {
         source: 'centers',
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-radius': 5,
-          'circle-color': 'rgba(168,199,250,0.85)',
-          'circle-stroke-color': 'rgba(168,199,250,0.9)',
-          'circle-stroke-width': 1,
+          'circle-radius': 11,
+          'circle-color': '#60a5fa',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 3,
+          'circle-opacity': 1,
           'circle-opacity-transition': { duration: 300 },
           'circle-radius-transition': { duration: 300 },
         },
@@ -384,6 +534,47 @@ const Dashboard = () => {
           'line-opacity-transition': { duration: 400 },
         },
       });
+
+      map.addLayer({
+        id: 'highlight-pulse-outer',
+        type: 'circle',
+        source: 'highlight',
+        paint: {
+          'circle-radius': 36,
+          'circle-color': 'rgba(239, 68, 68, 0.18)',
+          'circle-stroke-color': '#ef4444',
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.95,
+        },
+      });
+
+      map.addLayer({
+        id: 'highlight-pulse-mid',
+        type: 'circle',
+        source: 'highlight',
+        paint: {
+          'circle-radius': 22,
+          'circle-color': 'rgba(239, 68, 68, 0.45)',
+          'circle-stroke-color': '#fca5a5',
+          'circle-stroke-width': 3,
+          'circle-opacity': 1,
+        },
+      });
+
+      map.addLayer({
+        id: 'highlight-core',
+        type: 'circle',
+        source: 'highlight',
+        paint: {
+          'circle-radius': 12,
+          'circle-color': '#ef4444',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 4,
+          'circle-opacity': 1,
+        },
+      });
+
+      window.setTimeout(() => map.resize(), 150);
     });
 
     return () => {
@@ -395,33 +586,52 @@ const Dashboard = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (!mapReadyRef.current || !mapRef.current) return;
-    const source = mapRef.current.getSource('events');
-    if (source?.setData) {
-      source.setData(featureCollection(eventFeatures));
+  const syncMapSource = (sourceName, features) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      const source = map.getSource(sourceName);
+      if (source?.setData) source.setData(featureCollection(features));
+    };
+    if (mapReadyRef.current) {
+      apply();
+    } else {
+      map.once('load', apply);
     }
+  };
+
+  useEffect(() => {
+    syncMapSource('events', eventFeatures);
   }, [eventFeatures]);
 
-  useEffect(() => {
-    if (!mapReadyRef.current || !mapRef.current) return;
-    const source = mapRef.current.getSource('centers');
-    if (source?.setData) {
-      source.setData(featureCollection(centerFeatures));
-    }
-  }, [centerFeatures]);
+useEffect(() => {
+  syncMapSource('centers', centerFeatures);
+}, [centerFeatures]);
 
   useEffect(() => {
-    if (!mapReadyRef.current || !mapRef.current || hasFitBoundsRef.current) return;
-    const points = [...eventFeatures, ...centerFeatures];
-    if (!points.length) return;
-    const bounds = points.reduce((acc, feature) => {
-      const [lng, lat] = feature.geometry.coordinates;
-      return acc.extend([lng, lat]);
-    }, new maplibregl.LngLatBounds(points[0].geometry.coordinates, points[0].geometry.coordinates));
+  if (hasFitBoundsRef.current) return;
+  const points = [...eventFeatures, ...centerFeatures];
+  if (!points.length) return;
+
+  const doFit = () => {
+    if (!mapRef.current) return;
+    const bounds = points.reduce(
+      (acc, feature) => acc.extend(feature.geometry.coordinates),
+      new maplibregl.LngLatBounds(
+        points[0].geometry.coordinates,
+        points[0].geometry.coordinates,
+      ),
+    );
     mapRef.current.fitBounds(bounds, { padding: 60, duration: 800, maxZoom: 9 });
     hasFitBoundsRef.current = true;
-  }, [eventFeatures, centerFeatures]);
+  };
+
+  if (mapReadyRef.current) {
+    doFit();
+  } else if (mapRef.current) {
+    mapRef.current.once('load', doFit);
+  }
+}, [eventFeatures, centerFeatures]);
 
   useEffect(() => {
     let isActive = true;
@@ -468,6 +678,25 @@ const Dashboard = () => {
       source.setData(routeFeature ? featureCollection([routeFeature]) : featureCollection([]));
     }
   }, [routeFeature]);
+
+  useEffect(() => {
+    if (!mapReadyRef.current || !mapRef.current) return;
+    const source = mapRef.current.getSource('highlight');
+    if (source?.setData) {
+      source.setData(
+        highlightFeature ? featureCollection([highlightFeature]) : featureCollection([])
+      );
+    }
+  }, [highlightFeature]);
+
+  useEffect(() => {
+    if (!mapContainerRef.current || !mapRef.current) return undefined;
+    const observer = new ResizeObserver(() => {
+      mapRef.current?.resize();
+    });
+    observer.observe(mapContainerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const validateAlert = () => {
     const nextErrors = {};
@@ -608,9 +837,10 @@ const Dashboard = () => {
 
         <div className="telemetry-layout">
           <div className="feed-panel">
-            <div className="alert-panel">
+            <div className="feed-column alert-panel">
               <div className="section-title" style={{ marginBottom: '12px' }}>
                 <h2>System Alerts</h2>
+                <span className="mono-label" style={{ fontSize: '0.7rem' }}>Click to locate on map</span>
               </div>
               <div className="incident-list">
                 {recentAlerts.length === 0 ? (
@@ -622,22 +852,42 @@ const Dashboard = () => {
                   </div>
                 ) : (
                   recentAlerts.map((alert) => (
-                    <div className="incident-row" key={alert.id}>
+                    <div
+                      className={`incident-row${selectedFeedKey === `alert:${alert.id}` ? ' is-selected' : ''}${isLocatingFeed && selectedFeedKey === `alert:${alert.id}` ? ' is-locating' : ''}`}
+                      key={alert.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleAlertClick(alert)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleAlertClick(alert);
+                        }
+                      }}
+                    >
                       <div className="incident-row-header">
                         <span className="mono-label">{alert.label}</span>
                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                           <span className="alert-badge">{alert.disaster}</span>
                           <button
+                            type="button"
                             className="edit-icon-btn"
                             title="Edit alert"
-                            onClick={() => handleEditAlert(alert.raw)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditAlert(alert.raw);
+                            }}
                           >
                             <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>edit</span>
                           </button>
                           <button
+                            type="button"
                             className="delete-icon-btn"
                             title="Delete alert"
-                            onClick={() => handleDeleteAlert(alert.raw)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteAlert(alert.raw);
+                            }}
                           >
                             <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>delete</span>
                           </button>
@@ -653,23 +903,47 @@ const Dashboard = () => {
                 )}
               </div>
             </div>
-            <div className="section-title" style={{ marginTop: '16px' }}>
-              <h2>Incident Feed</h2>
-            </div>
-            <div className="incident-list">
-              {recentEvents.map(event => (
-                <div className={`incident-row severity-${event.severity.toLowerCase()}`} key={event.id}>
-                  <div className="incident-row-header">
-                    <span className="mono-label">{event.type}</span>
-                    <span className="severity-badge">{event.severity}</span>
+            <div className="feed-column">
+              <div className="section-title" style={{ marginBottom: '12px' }}>
+                <h2>Incident Feed</h2>
+                <span className="mono-label" style={{ fontSize: '0.7rem' }}>Click to locate on map</span>
+              </div>
+              <div className="incident-list">
+                {recentEvents.length === 0 ? (
+                  <div className="incident-row">
+                    <div className="incident-row-header">
+                      <span className="mono-label">No incidents</span>
+                    </div>
+                    <div className="incident-type">Log an incident to see it here and on the map.</div>
                   </div>
-                  <div className="incident-type">{event.type}</div>
-                  <div className="incident-location">
-                    <span className="material-symbols-rounded">my_location</span>
-                    {event.zone}
-                  </div>
-                </div>
-              ))}
+                ) : (
+                  recentEvents.map((event) => (
+                    <div
+                      className={`incident-row severity-${event.severity.toLowerCase()}${selectedFeedKey === `incident:${event.id}` ? ' is-selected' : ''}${isLocatingFeed && selectedFeedKey === `incident:${event.id}` ? ' is-locating' : ''}`}
+                      key={event.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleIncidentClick(event)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleIncidentClick(event);
+                        }
+                      }}
+                    >
+                      <div className="incident-row-header">
+                        <span className="mono-label">{event.type}</span>
+                        <span className="severity-badge">{event.severity}</span>
+                      </div>
+                      <div className="incident-type">{event.type}</div>
+                      <div className="incident-location">
+                        <span className="material-symbols-rounded">my_location</span>
+                        {event.zone}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
 

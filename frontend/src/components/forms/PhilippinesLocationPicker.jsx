@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import LabsDropdown from '../ui/LabsDropdown';
+import { geocodePhilippinesPlace } from '../../services/geocode';
+import { NCR_PROVINCE_KEY, NCR_REGION_CODE } from '../../utils/philippinesGeo';
 
 const PSGC_BASE_URL = 'https://psgc.gitlab.io/api';
 
@@ -13,6 +15,7 @@ const fetchCachedJson = async (cacheKey, url) => {
     }
   }
   const response = await fetch(url);
+  if (!response.ok) throw new Error(`PSGC request failed: ${url}`);
   const data = await response.json();
   sessionStorage.setItem(cacheKey, JSON.stringify(data));
   return data;
@@ -24,11 +27,22 @@ const buildLabel = (barangay, cityMunicipality, province) => {
     .join(', ');
 };
 
+const emptyValue = () => ({
+  provinceCode: '',
+  cityMunicipalityCode: '',
+  cityMunicipalityType: '',
+  barangayCode: '',
+  label: '',
+});
+
 const PhilippinesLocationPicker = ({
   label = 'Location (Philippines)',
   includeBarangay = true,
+  autoResolveCoordinates = true,
+  value,
   onChange,
   onCoordinates,
+  onLocationDetail,
 }) => {
   const [provinces, setProvinces] = useState([]);
   const [cityMunicipalities, setCityMunicipalities] = useState([]);
@@ -39,12 +53,14 @@ const PhilippinesLocationPicker = ({
   const [barangayCode, setBarangayCode] = useState('');
   const [placeQuery, setPlaceQuery] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
-  const geoCacheRef = useRef(new Map());
+  const [isResolving, setIsResolving] = useState(false);
+  const hydratingRef = useRef(false);
+  const lastResolvedLabelRef = useRef('');
 
-  const provinceOptions = useMemo(
-    () => provinces.map((item) => ({ label: item.name, value: item.code })),
-    [provinces]
-  );
+  const provinceOptions = useMemo(() => {
+    const base = provinces.map((item) => ({ label: item.name, value: item.code }));
+    return [{ label: 'Metro Manila (NCR)', value: NCR_PROVINCE_KEY }, ...base];
+  }, [provinces]);
 
   const cityMunicipalityOptions = useMemo(
     () => cityMunicipalities.map((item) => ({
@@ -59,159 +75,307 @@ const PhilippinesLocationPicker = ({
     [barangays]
   );
 
-  const resolveCoordinates = async (labelText) => {
-    const key = String(labelText || '').trim();
-    if (!key) return null;
-    const cached = geoCacheRef.current.get(key);
-    if (cached) return cached;
-    try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ph&q=${encodeURIComponent(key)}`;
-      const response = await fetch(url, { headers: { 'Accept-Language': 'en' } });
-      const json = await response.json();
-      const first = json?.[0];
-      if (!first?.lat || !first?.lon) return null;
-      const coords = { lat: Number(first.lat), lng: Number(first.lon) };
-      geoCacheRef.current.set(key, coords);
-      return coords;
-    } catch (err) {
-      return null;
+  const getSelectedParts = useCallback(() => {
+    const province = provinceCode === NCR_PROVINCE_KEY
+      ? { name: 'Metro Manila' }
+      : provinces.find((item) => item.code === provinceCode);
+    const cityMunicipality = cityMunicipalities.find((item) => item.code === cityMunicipalityCode);
+    const barangay = barangays.find((item) => item.code === barangayCode);
+    return {
+      barangay: barangay?.name || '',
+      city: cityMunicipality?.name || '',
+      province: province?.name || '',
+    };
+  }, [
+    barangayCode,
+    barangays,
+    cityMunicipalities,
+    cityMunicipalityCode,
+    provinceCode,
+    provinces,
+  ]);
+
+  const emitLocationDetail = useCallback((labelText) => {
+    if (!onLocationDetail) return;
+    const province = provinceCode === NCR_PROVINCE_KEY
+      ? { code: NCR_PROVINCE_KEY, name: 'Metro Manila (NCR)' }
+      : provinces.find((item) => item.code === provinceCode);
+    const cityMunicipality = cityMunicipalities.find((item) => item.code === cityMunicipalityCode);
+    const barangay = barangays.find((item) => item.code === barangayCode);
+    onLocationDetail({
+      province_code: provinceCode === NCR_PROVINCE_KEY ? NCR_REGION_CODE : (provinceCode || null),
+      city_municipality_code: cityMunicipalityCode || null,
+      city_municipality_type: cityMunicipalityType || null,
+      barangay_code: barangayCode || null,
+      label: labelText || buildLabel(barangay, cityMunicipality, province),
+    });
+  }, [
+    barangayCode,
+    barangays,
+    cityMunicipalityCode,
+    cityMunicipalities,
+    cityMunicipalityType,
+    onLocationDetail,
+    provinceCode,
+    provinces,
+  ]);
+
+  const applyCoordinates = useCallback(async (labelText, parts = {}, { silent = false } = {}) => {
+    if (!onCoordinates || !labelText) return false;
+    if (!silent) {
+      setIsResolving(true);
+      setStatusMessage('Resolving coordinates...');
     }
-  };
+    const coords = await geocodePhilippinesPlace(labelText, parts);
+    if (!coords) {
+      if (!silent) {
+        setStatusMessage('Could not resolve coordinates. Try selecting city/municipality or a more specific place name.');
+      }
+      setIsResolving(false);
+      return false;
+    }
+    onCoordinates(coords);
+    lastResolvedLabelRef.current = labelText;
+    if (!silent) {
+      setStatusMessage(`Coordinates set: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`);
+    }
+    setIsResolving(false);
+    return true;
+  }, [onCoordinates]);
 
   useEffect(() => {
     const loadProvinces = async () => {
-      const data = await fetchCachedJson(
-        'psgc:provinces',
-        `${PSGC_BASE_URL}/provinces.json`
-      );
-      setProvinces(Array.isArray(data) ? data : []);
+      try {
+        const data = await fetchCachedJson(
+          'psgc:provinces',
+          `${PSGC_BASE_URL}/provinces.json`
+        );
+        setProvinces(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setStatusMessage('Could not load provinces. Check your connection.');
+      }
     };
     loadProvinces();
   }, []);
 
   useEffect(() => {
+    if (!value) return;
+    hydratingRef.current = true;
+    setProvinceCode(value.provinceCode === NCR_REGION_CODE ? NCR_PROVINCE_KEY : (value.provinceCode || ''));
+    setCityMunicipalityCode(value.cityMunicipalityCode || '');
+    setCityMunicipalityType(value.cityMunicipalityType || '');
+    setBarangayCode(value.barangayCode || '');
+    if (value.label) setPlaceQuery('');
+    const timer = setTimeout(() => {
+      hydratingRef.current = false;
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [
+    value?.provinceCode,
+    value?.cityMunicipalityCode,
+    value?.cityMunicipalityType,
+    value?.barangayCode,
+  ]);
+
+  useEffect(() => {
     if (!provinceCode) {
       setCityMunicipalities([]);
-      setCityMunicipalityCode('');
-      setCityMunicipalityType('');
+      if (!hydratingRef.current) {
+        setCityMunicipalityCode('');
+        setCityMunicipalityType('');
+        setBarangayCode('');
+      }
+      setBarangays([]);
       return;
     }
+
     const loadCityMunicipalities = async () => {
-      const [cities, municipalities] = await Promise.all([
-        fetchCachedJson(
-          `psgc:cities:${provinceCode}`,
-          `${PSGC_BASE_URL}/provinces/${provinceCode}/cities.json`
-        ),
-        fetchCachedJson(
-          `psgc:municipalities:${provinceCode}`,
-          `${PSGC_BASE_URL}/provinces/${provinceCode}/municipalities.json`
-        ),
-      ]);
+      try {
+        if (provinceCode === NCR_PROVINCE_KEY) {
+          const cities = await fetchCachedJson(
+            `psgc:ncr:cities`,
+            `${PSGC_BASE_URL}/regions/${NCR_REGION_CODE}/cities.json`
+          );
+          const nextItems = (Array.isArray(cities) ? cities : [])
+            .map((item) => ({ ...item, type: 'city' }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+          setCityMunicipalities(nextItems);
+          return;
+        }
 
-      const nextItems = [
-        ...(Array.isArray(cities) ? cities.map((item) => ({ ...item, type: 'city' })) : []),
-        ...(Array.isArray(municipalities) ? municipalities.map((item) => ({ ...item, type: 'municipality' })) : []),
-      ].sort((a, b) => a.name.localeCompare(b.name));
+        const [cities, municipalities] = await Promise.all([
+          fetchCachedJson(
+            `psgc:cities:${provinceCode}`,
+            `${PSGC_BASE_URL}/provinces/${provinceCode}/cities.json`
+          ),
+          fetchCachedJson(
+            `psgc:municipalities:${provinceCode}`,
+            `${PSGC_BASE_URL}/provinces/${provinceCode}/municipalities.json`
+          ),
+        ]);
 
-      setCityMunicipalities(nextItems);
+        const nextItems = [
+          ...(Array.isArray(cities) ? cities.map((item) => ({ ...item, type: 'city' })) : []),
+          ...(Array.isArray(municipalities) ? municipalities.map((item) => ({ ...item, type: 'municipality' })) : []),
+        ].sort((a, b) => a.name.localeCompare(b.name));
+
+        setCityMunicipalities(nextItems);
+      } catch (err) {
+        setStatusMessage('Could not load cities/municipalities.');
+      }
     };
 
     loadCityMunicipalities();
-    setCityMunicipalityCode('');
-    setCityMunicipalityType('');
-    setBarangayCode('');
-    setBarangays([]);
+    if (!hydratingRef.current) {
+      setCityMunicipalityCode('');
+      setCityMunicipalityType('');
+      setBarangayCode('');
+      setBarangays([]);
+    }
   }, [provinceCode]);
 
   useEffect(() => {
     if (!includeBarangay || !cityMunicipalityCode || !cityMunicipalityType) {
-      setBarangayCode('');
+      if (!hydratingRef.current) setBarangayCode('');
       setBarangays([]);
       return;
     }
 
     const loadBarangays = async () => {
-      const endpoint = cityMunicipalityType === 'city'
-        ? `${PSGC_BASE_URL}/cities/${cityMunicipalityCode}/barangays.json`
-        : `${PSGC_BASE_URL}/municipalities/${cityMunicipalityCode}/barangays.json`;
-      const data = await fetchCachedJson(
-        `psgc:barangays:${cityMunicipalityType}:${cityMunicipalityCode}`,
-        endpoint
-      );
-      setBarangays(Array.isArray(data) ? data : []);
+      try {
+        const endpoint = cityMunicipalityType === 'city'
+          ? `${PSGC_BASE_URL}/cities/${cityMunicipalityCode}/barangays.json`
+          : `${PSGC_BASE_URL}/municipalities/${cityMunicipalityCode}/barangays.json`;
+        const data = await fetchCachedJson(
+          `psgc:barangays:${cityMunicipalityType}:${cityMunicipalityCode}`,
+          endpoint
+        );
+        setBarangays(Array.isArray(data) ? data : []);
+      } catch (err) {
+        setStatusMessage('Could not load barangays.');
+      }
     };
 
     loadBarangays();
-    setBarangayCode('');
+    if (!hydratingRef.current) setBarangayCode('');
   }, [cityMunicipalityCode, cityMunicipalityType, includeBarangay]);
 
   useEffect(() => {
-    if (!onChange) return;
-    const province = provinces.find((item) => item.code === provinceCode);
+    const province = provinceCode === NCR_PROVINCE_KEY
+      ? { code: NCR_PROVINCE_KEY, name: 'Metro Manila (NCR)' }
+      : provinces.find((item) => item.code === provinceCode);
     const cityMunicipality = cityMunicipalities.find((item) => item.code === cityMunicipalityCode);
     const barangay = barangays.find((item) => item.code === barangayCode);
     const labelText = buildLabel(barangay, cityMunicipality, province);
-    if (labelText) onChange(labelText);
-  }, [barangayCode, barangays, cityMunicipalityCode, cityMunicipalities, onChange, provinceCode, provinces]);
+    if (!labelText) return;
+    if (onChange) onChange(labelText);
+    emitLocationDetail(labelText);
+
+    const selectionComplete = includeBarangay
+      ? Boolean(barangayCode) || Boolean(cityMunicipalityCode && cityMunicipalityType)
+      : Boolean(cityMunicipalityCode && cityMunicipalityType);
+
+    if (
+      autoResolveCoordinates
+      && onCoordinates
+      && selectionComplete
+      && !hydratingRef.current
+      && labelText !== lastResolvedLabelRef.current
+    ) {
+      applyCoordinates(labelText, getSelectedParts(), { silent: true });
+    }
+  }, [
+    applyCoordinates,
+    getSelectedParts,
+    autoResolveCoordinates,
+    barangayCode,
+    barangays,
+    cityMunicipalityCode,
+    cityMunicipalities,
+    cityMunicipalityType,
+    emitLocationDetail,
+    includeBarangay,
+    onChange,
+    onCoordinates,
+    provinceCode,
+    provinces,
+  ]);
 
   const handleResolveSelection = async () => {
-    if (!onCoordinates) return;
-    const province = provinces.find((item) => item.code === provinceCode);
+    const province = provinceCode === NCR_PROVINCE_KEY
+      ? { code: NCR_PROVINCE_KEY, name: 'Metro Manila (NCR)' }
+      : provinces.find((item) => item.code === provinceCode);
     const cityMunicipality = cityMunicipalities.find((item) => item.code === cityMunicipalityCode);
     const barangay = barangays.find((item) => item.code === barangayCode);
     const labelText = buildLabel(barangay, cityMunicipality, province);
     if (!labelText) {
-      setStatusMessage('Select a location first.');
+      setStatusMessage('Select province, city/municipality' + (includeBarangay ? ', and barangay.' : '.'));
       return;
     }
-    setStatusMessage('Resolving coordinates...');
-    const coords = await resolveCoordinates(`${labelText}, Philippines`);
-    if (!coords) {
-      setStatusMessage('No coordinates found for that location.');
-      return;
-    }
-    onCoordinates(coords);
-    setStatusMessage(`Coordinates set: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`);
+    await applyCoordinates(labelText, getSelectedParts());
   };
 
   const handleResolveSearch = async () => {
-    if (!onCoordinates) return;
     if (!placeQuery.trim()) return;
+    const query = placeQuery.trim();
+    setIsResolving(true);
     setStatusMessage('Resolving coordinates...');
-    const coords = await resolveCoordinates(`${placeQuery}, Philippines`);
+    const coords = await geocodePhilippinesPlace(query, getSelectedParts());
     if (!coords) {
-      setStatusMessage('No coordinates found for that place.');
+      setStatusMessage('No coordinates found for that place. Try adding province or city (e.g. "Iba, Zambales").');
+      setIsResolving(false);
       return;
     }
-    if (onChange) onChange(placeQuery.trim());
-    onCoordinates(coords);
+    if (onChange) onChange(query);
+    if (onCoordinates) onCoordinates(coords);
+    if (onLocationDetail) {
+      onLocationDetail({
+        province_code: null,
+        city_municipality_code: null,
+        city_municipality_type: null,
+        barangay_code: null,
+        label: query,
+      });
+    }
+    lastResolvedLabelRef.current = query;
     setStatusMessage(`Coordinates set: ${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`);
+    setIsResolving(false);
+  };
+
+  const handlePlaceKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleResolveSearch();
+    }
   };
 
   return (
-    <div className="labs-form-group">
-      <label>{label}</label>
+    <div className="labs-form-group philippines-location-picker">
+      {label ? <label>{label}</label> : null}
+      <p className="mono-label" style={{ marginBottom: '12px', opacity: 0.7 }}>
+        Select from Philippine administrative areas or type a place name. Map coordinates stay within the Philippines.
+      </p>
       <div className="labs-form-grid">
         <div className="labs-form-group">
           <label>Province</label>
           <LabsDropdown
             options={provinceOptions}
             value={provinceCode}
-            onChange={(value) => setProvinceCode(value)}
+            onChange={(next) => setProvinceCode(next)}
             placeholder="Select province"
           />
         </div>
         <div className="labs-form-group">
-          <label>Municipality / City</label>
+          <label>City / Municipality</label>
           <LabsDropdown
             options={cityMunicipalityOptions}
             value={cityMunicipalityCode ? `${cityMunicipalityType}:${cityMunicipalityCode}` : ''}
-            onChange={(value) => {
-              const [type, code] = value.split(':');
+            onChange={(next) => {
+              const [type, code] = next.split(':');
               setCityMunicipalityType(type);
               setCityMunicipalityCode(code);
             }}
-            placeholder={provinceCode ? 'Select municipality/city' : 'Select province first'}
+            placeholder={provinceCode ? 'Select city or municipality' : 'Select province first'}
           />
         </div>
       </div>
@@ -221,31 +385,42 @@ const PhilippinesLocationPicker = ({
           <LabsDropdown
             options={barangayOptions}
             value={barangayCode}
-            onChange={(value) => setBarangayCode(value)}
-            placeholder={cityMunicipalityCode ? 'Select barangay' : 'Select municipality/city first'}
+            onChange={(next) => setBarangayCode(next)}
+            placeholder={cityMunicipalityCode ? 'Select barangay' : 'Select city/municipality first'}
           />
         </div>
       )}
       <div className="labs-form-grid">
         <div className="labs-form-group">
-          <label>Quick Search</label>
+          <label>Quick search (place name)</label>
           <input
             type="text"
             className="labs-input"
-            placeholder="Type a place name"
+            placeholder="e.g. Tacloban, Cebu City, Baguio"
             value={placeQuery}
             onChange={(e) => setPlaceQuery(e.target.value)}
+            onKeyDown={handlePlaceKeyDown}
           />
         </div>
         <div className="labs-form-group" style={{ justifyContent: 'flex-end' }}>
-          <button type="button" className="labs-btn-ghost" onClick={handleResolveSearch}>
-            Use Place Name
+          <button
+            type="button"
+            className="labs-btn-ghost"
+            onClick={handleResolveSearch}
+            disabled={isResolving}
+          >
+            Use place name
           </button>
         </div>
       </div>
       {onCoordinates && (
-        <button type="button" className="labs-btn-ghost" onClick={handleResolveSelection}>
-          Use Selected Location
+        <button
+          type="button"
+          className="labs-btn-ghost"
+          onClick={handleResolveSelection}
+          disabled={isResolving}
+        >
+          Use selected location
         </button>
       )}
       {statusMessage && (
@@ -254,5 +429,7 @@ const PhilippinesLocationPicker = ({
     </div>
   );
 };
+
+PhilippinesLocationPicker.emptyValue = emptyValue;
 
 export default PhilippinesLocationPicker;

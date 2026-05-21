@@ -16,6 +16,10 @@ router = APIRouter()
 class DisasterEventCreate(BaseModel):
     disaster_type: Literal["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide"]
     location: str
+    province_code: Optional[str] = None
+    city_municipality_code: Optional[str] = None
+    city_municipality_type: Optional[str] = None
+    barangay_code: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     date_occurred: datetime
@@ -29,6 +33,10 @@ class DisasterEventUpdate(BaseModel):
         Literal["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide"]
     ] = None
     location: Optional[str] = None
+    province_code: Optional[str] = None
+    city_municipality_code: Optional[str] = None
+    city_municipality_type: Optional[str] = None
+    barangay_code: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     date_occurred: Optional[datetime] = None
