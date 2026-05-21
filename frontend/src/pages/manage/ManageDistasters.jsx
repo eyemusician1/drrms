@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
 import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
@@ -230,6 +230,28 @@ const ManageDisasters = () => {
     }
   };
 
+  // --- STABLE CALLBACKS TO PREVENT INFINITE RENDERING LOOPS ---
+  const handleLocationChange = useCallback((value) => {
+    setLocationLabel(value);
+  }, []);
+
+  const handleLocationDetail = useCallback((detail) => {
+    setLocationDetail(detail);
+  }, []);
+
+  const handleCoordinates = useCallback((coords) => {
+    setLatitude(String(coords.lat));
+    setLongitude(String(coords.lng));
+
+    // Only update errors state if an error actually exists to prevent unnecessary renders
+    setErrors((prev) => {
+      if (prev.latitude || prev.longitude) {
+        return { ...prev, latitude: false, longitude: false };
+      }
+      return prev;
+    });
+  }, []);
+
   return (
     <div className="dashboard-view fade-in">
       <header className="view-header">
@@ -354,14 +376,9 @@ const ManageDisasters = () => {
         </div>
         <PhilippinesLocationPicker
           value={pickerValue}
-          onChange={(value) => setLocationLabel(value)}
-          onLocationDetail={setLocationDetail}
-          onCoordinates={(coords) => {
-            setLatitude(String(coords.lat));
-            setLongitude(String(coords.lng));
-            if (errors.latitude) setErrors((prev) => ({ ...prev, latitude: false }));
-            if (errors.longitude) setErrors((prev) => ({ ...prev, longitude: false }));
-          }}
+          onChange={handleLocationChange}
+          onLocationDetail={handleLocationDetail}
+          onCoordinates={handleCoordinates}
         />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div className="labs-form-group">

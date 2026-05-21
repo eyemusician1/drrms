@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
 import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
@@ -194,6 +194,11 @@ const ManageTeams = () => {
     return { label, value: eventId };
   });
 
+  // --- STABLE CALLBACK TO PREVENT INFINITE RENDERING LOOPS ---
+  const handleOperationZoneChange = useCallback((value) => {
+    setOperationZone(value);
+  }, []);
+
   return (
     <div className="dashboard-view fade-in">
       <header className="view-header">
@@ -351,7 +356,7 @@ const ManageTeams = () => {
           label="Operation Zone (Optional)"
           includeBarangay={false}
           autoResolveCoordinates={false}
-          onChange={(value) => setOperationZone(value)}
+          onChange={handleOperationZoneChange}
         />
       </Modal>
 

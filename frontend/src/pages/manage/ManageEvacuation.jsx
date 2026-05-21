@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
 import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
@@ -209,9 +209,32 @@ const ManageEvacuation = () => {
     }
   };
 
+  // --- STABLE CALLBACKS TO PREVENT INFINITE RENDERING LOOPS ---
+  const handleLocationChange = useCallback((value) => {
+    setLocation(value);
+    setErrors((prev) => {
+      if (prev.location) return { ...prev, location: false };
+      return prev;
+    });
+  }, []);
+
+  const handleLocationDetail = useCallback((detail) => {
+    setLocationDetail(detail);
+  }, []);
+
+  const handleCoordinates = useCallback((coords) => {
+    setLatitude(String(coords.lat));
+    setLongitude(String(coords.lng));
+    setErrors((prev) => {
+      if (prev.latitude || prev.longitude) {
+        return { ...prev, latitude: false, longitude: false };
+      }
+      return prev;
+    });
+  }, []);
+
   return (
     <div className="dashboard-view fade-in">
-      {/* ... Headers and Grids remain exactly the same ... */}
       <header className="view-header">
         <div className="header-meta">
           <h1>Evacuation Centers</h1>
@@ -310,17 +333,9 @@ const ManageEvacuation = () => {
         </div>
         <PhilippinesLocationPicker
           value={pickerValue}
-          onChange={(value) => {
-            setLocation(value);
-            if (errors.location) setErrors((prev) => ({ ...prev, location: false }));
-          }}
-          onLocationDetail={setLocationDetail}
-          onCoordinates={(coords) => {
-            setLatitude(String(coords.lat));
-            setLongitude(String(coords.lng));
-            if (errors.latitude) setErrors((prev) => ({ ...prev, latitude: false }));
-            if (errors.longitude) setErrors((prev) => ({ ...prev, longitude: false }));
-          }}
+          onChange={handleLocationChange}
+          onLocationDetail={handleLocationDetail}
+          onCoordinates={handleCoordinates}
         />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div className="labs-form-group">
@@ -357,7 +372,6 @@ const ManageEvacuation = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div className="labs-form-group">
             <label>Maximum Capacity (Pax)</label>
-            {/* NO NEGATIVE NUMBERS FIX */}
             <input
               type="text"
               inputMode="numeric"
@@ -429,7 +443,6 @@ const ManageEvacuation = () => {
         </div>
       </Modal>
 
-      {/* RENDER TOAST HERE */}
       <Toast toasts={toasts} onCloseAll={clearToasts} />
     </div>
   );
