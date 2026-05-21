@@ -6,13 +6,27 @@ import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
 import { coordinateOnly, digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
+import { locationFieldsFromDetail, toPickerValue } from '../../utils/locationValue';
+import { isWithinPhilippines } from '../../utils/philippinesGeo';
 import './ManagePages.css';
+
+// ---------------------------------------------------------------------------
+// Normalize MongoDB _id — Beanie may return { $oid: "..." } or a plain string
+// ---------------------------------------------------------------------------
+const normalizeId = (raw) => {
+  if (!raw) return '';
+  if (typeof raw === 'string') return raw;
+  if (typeof raw === 'object' && raw.$oid) return raw.$oid;
+  return String(raw);
+};
 
 const ManageDisasters = () => {
   const [isIncidentModalOpen, setIncidentModalOpen] = useState(false);
   const [disasterType, setDisasterType] = useState('');
   const [severity, setSeverity] = useState('');
   const [locationLabel, setLocationLabel] = useState('');
+  const [locationDetail, setLocationDetail] = useState(null);
+  const [pickerValue, setPickerValue] = useState(null);
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [dateOccurred, setDateOccurred] = useState(() => new Date().toISOString().slice(0, 10));
@@ -34,13 +48,21 @@ const ManageDisasters = () => {
     { label: 'Critical Zones', value: String(criticalCount).padStart(2, '0') },
   ];
 
-  const disasters = (disasterEvents || []).map((event) => ({
-    id: event.id || event._id || 'DR-000',
-    type: event.disaster_type || 'Unknown',
-    location: event.location || 'Unknown Area',
-    severity: event.severity_level || 'Moderate',
-    status: event.status === 'Ongoing' ? 'Active' : (event.status || 'Monitoring'),
-  }));
+  // FIX: normalize id via normalizeId(); keep latitude/longitude as numbers so
+  // the Overview Dashboard can use them directly without re-parsing.
+  const disasters = (disasterEvents || []).map((event) => {
+    const id = normalizeId(event.id || event._id);
+    return {
+      id: id || `dr-${Math.random().toString(36).slice(2)}`,
+      type: event.disaster_type || 'Unknown',
+      location: event.location || 'Unknown Area',
+      severity: event.severity_level || 'Moderate',
+      status: event.status === 'Ongoing' ? 'Active' : (event.status || 'Monitoring'),
+      // Expose numeric coords so parent/sibling pages can flyTo without geocoding
+      latitude: typeof event.latitude === 'number' ? event.latitude : Number.parseFloat(event.latitude) || null,
+      longitude: typeof event.longitude === 'number' ? event.longitude : Number.parseFloat(event.longitude) || null,
+    };
+  });
 
   const pushToast = (message, type = 'info') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -53,11 +75,15 @@ const ManageDisasters = () => {
 
   const sanitizeText = (value) => sanitizeTextInput(value, 200).trim();
 
+  // FIX: parse to Number, not string — prevents isWithinPhilippines receiving strings
   const parseCoordinatePair = (value) => {
     if (!value || typeof value !== 'string') return null;
     const match = value.match(/-?\d+(?:\.\d+)?/g);
     if (!match || match.length < 2) return null;
-    return { lat: match[0], lng: match[1] };
+    const lat = Number.parseFloat(match[0]);
+    const lng = Number.parseFloat(match[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
   };
 
   const isValidLat = (value) => {
@@ -74,14 +100,19 @@ const ManageDisasters = () => {
     const nextErrors = {};
     if (!sanitizeText(disasterType)) nextErrors.disasterType = true;
     if (!sanitizeText(severity)) nextErrors.severity = true;
-    if (!isValidLat(latitude)) nextErrors.latitude = true;
-    if (!isValidLng(longitude)) nextErrors.longitude = true;
+    if (!isValidLat(latitude) || !isWithinPhilippines(Number.parseFloat(latitude), Number.parseFloat(longitude))) nextErrors.latitude = true;
+    if (!isValidLng(longitude) || !isWithinPhilippines(Number.parseFloat(latitude), Number.parseFloat(longitude))) nextErrors.longitude = true;
     if (!sanitizeText(dateOccurred)) nextErrors.dateOccurred = true;
     if (!sanitizeText(status)) nextErrors.status = true;
 
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
-      pushToast('Please fill out all required fields.', 'warning');
+      pushToast(
+        nextErrors.latitude || nextErrors.longitude
+          ? 'Location must be within the Philippines with valid coordinates.'
+          : 'Please fill out all required fields.',
+        'warning'
+      );
       return false;
     }
     return true;
@@ -91,6 +122,8 @@ const ManageDisasters = () => {
     setDisasterType('');
     setSeverity('');
     setLocationLabel('');
+    setLocationDetail(null);
+    setPickerValue(null);
     setLatitude('');
     setLongitude('');
     setDateOccurred(new Date().toISOString().slice(0, 10));
@@ -106,20 +139,24 @@ const ManageDisasters = () => {
   };
 
   const handleEditIncident = (incident) => {
-    setEditingIncidentId(incident.id || incident._id || '');
+    setEditingIncidentId(normalizeId(incident.id || incident._id));
     setDisasterType(incident.disaster_type || '');
     setSeverity(incident.severity_level || '');
     setLocationLabel(incident.location || '');
+    setLocationDetail(locationFieldsFromDetail(incident));
+    setPickerValue(toPickerValue(incident));
     if (incident.latitude != null && incident.longitude != null) {
       setLatitude(String(incident.latitude));
       setLongitude(String(incident.longitude));
     } else {
       const parsed = parseCoordinatePair(incident.location || '');
-      setLatitude(parsed?.lat || '');
-      setLongitude(parsed?.lng || '');
+      setLatitude(parsed ? String(parsed.lat) : '');
+      setLongitude(parsed ? String(parsed.lng) : '');
     }
     setDateOccurred(
-      incident.date_occurred ? new Date(incident.date_occurred).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)
+      incident.date_occurred
+        ? new Date(incident.date_occurred).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10)
     );
     setDurationDays(incident.duration_days ? String(incident.duration_days) : '');
     setStatus(incident.status || 'Ongoing');
@@ -128,18 +165,19 @@ const ManageDisasters = () => {
   };
 
   const handleDeleteIncident = (incident) => {
-    if (!incident?.id && !incident?._id) return;
+    const id = normalizeId(incident?.id || incident?._id);
+    if (!id) return;
     setDeleteTarget(incident);
     setDeleteModalOpen(true);
   };
 
   const handleConfirmDelete = async () => {
-    const incidentId = deleteTarget?.id || deleteTarget?._id;
+    const incidentId = normalizeId(deleteTarget?.id || deleteTarget?._id);
     if (!incidentId) return;
     try {
       await request(`/api/v1/disasters/${incidentId}`, { method: 'DELETE' });
       setDisasterEvents((prev) => (Array.isArray(prev)
-        ? prev.filter((item) => (item.id || item._id) !== incidentId)
+        ? prev.filter((item) => normalizeId(item.id || item._id) !== incidentId)
         : prev));
       pushToast('Incident deleted.', 'success');
     } catch (err) {
@@ -158,6 +196,7 @@ const ManageDisasters = () => {
       const payload = {
         disaster_type: disasterType,
         location: normalizedLocation,
+        ...locationFieldsFromDetail(locationDetail),
         latitude: Number.parseFloat(latitude),
         longitude: Number.parseFloat(longitude),
         date_occurred: new Date(dateOccurred).toISOString(),
@@ -171,7 +210,7 @@ const ManageDisasters = () => {
           body: JSON.stringify(payload),
         });
         setDisasterEvents((prev) => (Array.isArray(prev)
-          ? prev.map((item) => ((item.id || item._id) === editingIncidentId ? updated : item))
+          ? prev.map((item) => (normalizeId(item.id || item._id) === editingIncidentId ? updated : item))
           : prev));
         pushToast('Incident updated successfully.', 'success');
       } else {
@@ -207,7 +246,10 @@ const ManageDisasters = () => {
 
       <div className="typo-stats-grid">
         {stats.map((stat, i) => (
-          <div className="typo-stat-card" key={i}><div className="typo-value">{stat.value}</div><div className="typo-label">{stat.label}</div></div>
+          <div className="typo-stat-card" key={i}>
+            <div className="typo-value">{stat.value}</div>
+            <div className="typo-label">{stat.label}</div>
+          </div>
         ))}
       </div>
 
@@ -219,33 +261,53 @@ const ManageDisasters = () => {
 
         <div className="labs-scroll-area">
           <div className="incident-grid">
-            {disasters.map(incident => (
+            {disasters.map((incident) => (
               <div className="incident-card" key={incident.id}>
                 <div className="card-header-flex">
-                  <span className={`severity-badge severity-${incident.severity.toLowerCase()}`} style={{ fontSize: '0.8rem', padding: '4px 12px' }}>{incident.severity}</span>
+                  <span
+                    className={`severity-badge severity-${incident.severity.toLowerCase()}`}
+                    style={{ fontSize: '0.8rem', padding: '4px 12px' }}
+                  >
+                    {incident.severity}
+                  </span>
                   <span className="mono-label">Incident</span>
                 </div>
                 <div>
-                  <h3 style={{ margin: '0 0 12px 0', fontSize: '1.8rem', fontWeight: '400', color: '#fff', letterSpacing: '-1px' }}>{incident.type}</h3>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '1.8rem', fontWeight: '400', color: '#fff', letterSpacing: '-1px' }}>
+                    {incident.type}
+                  </h3>
                   <div className="incident-location" style={{ fontSize: '1rem' }}>
                     <span className="material-symbols-rounded">location_on</span> {incident.location}
                   </div>
                 </div>
-                <div className="card-header-flex" style={{ marginTop: 'auto', paddingTop: '24px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <div
+                  className="card-header-flex"
+                  style={{ marginTop: 'auto', paddingTop: '24px', borderTop: '1px solid rgba(255,255,255,0.08)' }}
+                >
                   <span className="incident-status" style={{ fontWeight: 500 }}>{incident.status}</span>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button className="labs-btn-ghost">Take Action</button>
                     <button
                       className="edit-icon-btn"
                       title="Edit incident"
-                      onClick={() => handleEditIncident(disasterEvents.find((item) => (item.id || item._id) === incident.id) || {})}
+                      onClick={() => {
+                        const raw = (disasterEvents || []).find(
+                          (item) => normalizeId(item.id || item._id) === incident.id
+                        );
+                        handleEditIncident(raw || {});
+                      }}
                     >
                       <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>edit</span>
                     </button>
                     <button
                       className="delete-icon-btn"
                       title="Delete incident"
-                      onClick={() => handleDeleteIncident(disasterEvents.find((item) => (item.id || item._id) === incident.id) || {})}
+                      onClick={() => {
+                        const raw = (disasterEvents || []).find(
+                          (item) => normalizeId(item.id || item._id) === incident.id
+                        );
+                        handleDeleteIncident(raw || {});
+                      }}
                     >
                       <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>delete</span>
                     </button>
@@ -261,13 +323,13 @@ const ManageDisasters = () => {
         isOpen={isIncidentModalOpen}
         onClose={handleCloseIncidentModal}
         title={editingIncidentId ? 'Edit Incident' : 'Log New Incident'}
-        actionText={isSubmitting ? "Saving..." : (editingIncidentId ? 'Save Changes' : 'Initialize Tracking')}
+        actionText={isSubmitting ? 'Saving...' : (editingIncidentId ? 'Save Changes' : 'Initialize Tracking')}
         onAction={handleLogIncident}
       >
         <div className="labs-form-group">
           <label>Disaster Type</label>
           <LabsDropdown
-            options={["Typhoon", "Flood", "Earthquake", "Wildfire", "Landslide"]}
+            options={['Typhoon', 'Flood', 'Earthquake', 'Wildfire', 'Landslide']}
             value={disasterType}
             onChange={(value) => {
               setDisasterType(value);
@@ -277,31 +339,30 @@ const ManageDisasters = () => {
             hasError={errors.disasterType}
           />
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-          <div className="labs-form-group">
-            <label>Severity Level</label>
-            <LabsDropdown
-              options={["Low", "Moderate", "High", "Critical"]}
-              value={severity}
-              onChange={(value) => {
-                setSeverity(value);
-                if (errors.severity) setErrors((prev) => ({ ...prev, severity: false }));
-              }}
-              placeholder="Select Severity"
-              hasError={errors.severity}
-            />
-          </div>
-          <div className="labs-form-group">
-            <label>Location (Philippines)</label>
-            <PhilippinesLocationPicker
-              onChange={(value) => setLocationLabel(value)}
-              onCoordinates={(coords) => {
-                setLatitude(String(coords.lat));
-                setLongitude(String(coords.lng));
-              }}
-            />
-          </div>
+        <div className="labs-form-group">
+          <label>Severity Level</label>
+          <LabsDropdown
+            options={['Low', 'Moderate', 'High', 'Critical']}
+            value={severity}
+            onChange={(value) => {
+              setSeverity(value);
+              if (errors.severity) setErrors((prev) => ({ ...prev, severity: false }));
+            }}
+            placeholder="Select Severity"
+            hasError={errors.severity}
+          />
         </div>
+        <PhilippinesLocationPicker
+          value={pickerValue}
+          onChange={(value) => setLocationLabel(value)}
+          onLocationDetail={setLocationDetail}
+          onCoordinates={(coords) => {
+            setLatitude(String(coords.lat));
+            setLongitude(String(coords.lng));
+            if (errors.latitude) setErrors((prev) => ({ ...prev, latitude: false }));
+            if (errors.longitude) setErrors((prev) => ({ ...prev, longitude: false }));
+          }}
+        />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div className="labs-form-group">
             <label>Latitude</label>
@@ -364,7 +425,7 @@ const ManageDisasters = () => {
         <div className="labs-form-group">
           <label>Status</label>
           <LabsDropdown
-            options={["Ongoing", "Resolved"]}
+            options={['Ongoing', 'Resolved']}
             value={status}
             onChange={(value) => {
               setStatus(value);

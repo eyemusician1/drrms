@@ -23,6 +23,10 @@ class EvacuationCenterCreate(BaseModel):
     event_id: str
     name: str
     location: str
+    province_code: Optional[str] = None
+    city_municipality_code: Optional[str] = None
+    city_municipality_type: Optional[str] = None
+    barangay_code: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     capacity: int
@@ -35,6 +39,10 @@ class EvacuationCenterUpdate(BaseModel):
     event_id: Optional[str] = None
     name: Optional[str] = None
     location: Optional[str] = None
+    province_code: Optional[str] = None
+    city_municipality_code: Optional[str] = None
+    city_municipality_type: Optional[str] = None
+    barangay_code: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     capacity: Optional[int] = None

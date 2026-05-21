@@ -1,6 +1,7 @@
 from beanie import Document
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 
 class Supplies(BaseModel):
@@ -13,6 +14,10 @@ class EvacuationCenter(Document):
     event_id: str
     name: str
     location: str
+    province_code: Optional[str] = None
+    city_municipality_code: Optional[str] = None
+    city_municipality_type: Optional[str] = None
+    barangay_code: Optional[str] = None
     latitude: float | None = None
     longitude: float | None = None
     capacity: int

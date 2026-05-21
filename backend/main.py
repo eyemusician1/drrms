@@ -10,6 +10,7 @@ from app.api.v1.routes import (
     auth,
     disasters,
     evacuation,
+    geocode,
     relief,
     reports,
     stream,
@@ -69,6 +70,7 @@ app.include_router(
 app.include_router(relief.router, prefix="/api/v1/relief", tags=["Relief Operations"])
 app.include_router(warnings.router, prefix="/api/v1/warnings", tags=["Early Warnings"])
 app.include_router(reports.router, prefix="/api/v1/reports", tags=["Reports"])
+app.include_router(geocode.router, prefix="/api/v1/geocode", tags=["Geocoding"])
 app.include_router(stream.router, prefix="/api/v1/stream", tags=["Realtime"])
 
 
