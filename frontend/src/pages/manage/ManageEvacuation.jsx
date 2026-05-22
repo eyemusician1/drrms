@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
 import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
@@ -9,8 +10,10 @@ import { coordinateOnly, digitsOnly, sanitizeTextInput } from '../../utils/formG
 import { locationFieldsFromDetail, toPickerValue } from '../../utils/locationValue';
 import { isWithinPhilippines } from '../../utils/philippinesGeo';
 import './ManagePages.css';
+import useRequireAuth from '../../hooks/useRequireAuth';
 
 const ManageEvacuation = () => {
+  useRequireAuth();
   const [isShelterModalOpen, setShelterModalOpen] = useState(false);
   const [facilityName, setFacilityName] = useState('');
   const [capacity, setCapacity] = useState('');
@@ -31,6 +34,7 @@ const ManageEvacuation = () => {
   const [editingCenterId, setEditingCenterId] = useState('');
   const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const navigate = useNavigate();
 
   const shelters = (centerData || []).map((center) => ({
     id: center.id || center._id || 'EV-000',
@@ -46,7 +50,11 @@ const ManageEvacuation = () => {
   ];
   const eventOptions = (disasterEvents || []).map((event) => {
     const eventIdValue = event.id || event._id || 'DR-000';
-    const label = event.disaster_type || eventIdValue;
+    const loc = event.location || (Number.isFinite(event.latitude) && Number.isFinite(event.longitude)
+      ? `${Number(event.latitude).toFixed(4)}, ${Number(event.longitude).toFixed(4)}`
+      : 'Unknown area');
+    const type = event.disaster_type || 'Event';
+    const label = `${type} — ${loc}`;
     return { label, value: eventIdValue };
   });
 
@@ -171,6 +179,7 @@ const ManageEvacuation = () => {
     if (!validateShelter()) return;
     setIsSubmitting(true);
     try {
+      const selectedEvent = (disasterEvents || []).find((event) => (event.id || event._id) === eventId);
       const normalizedLocation = location || `${latitude}, ${longitude}`;
       const payload = {
         event_id: eventId,
@@ -192,6 +201,37 @@ const ManageEvacuation = () => {
           ? prev.map((item) => ((item.id || item._id) === editingCenterId ? updated : item))
           : prev));
         pushToast('Evacuation center updated.', 'success');
+        if (selectedEvent && Number.isFinite(Number(updated?.latitude)) && Number.isFinite(Number(updated?.longitude))) {
+          sessionStorage.setItem('drrms:pendingRoute', JSON.stringify({
+            origin: {
+              lat: Number(selectedEvent.latitude),
+              lng: Number(selectedEvent.longitude),
+              label: selectedEvent.location || selectedEvent.disaster_type || 'Incident',
+            },
+            destination: {
+              lat: Number(updated.latitude),
+              lng: Number(updated.longitude),
+              label: updated.location || updated.name || 'Evacuation Center',
+            },
+          }));
+          navigate('/manage/dashboard');
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('drrms:showRoute', {
+              detail: {
+                origin: {
+                  lat: Number(selectedEvent.latitude),
+                  lng: Number(selectedEvent.longitude),
+                  label: selectedEvent.location || selectedEvent.disaster_type || 'Incident',
+                },
+                destination: {
+                  lat: Number(updated.latitude),
+                  lng: Number(updated.longitude),
+                  label: updated.location || updated.name || 'Evacuation Center',
+                },
+              },
+            }));
+          }, 220);
+        }
       } else {
         const created = await request('/api/v1/evacuation/', {
           method: 'POST',
@@ -199,6 +239,37 @@ const ManageEvacuation = () => {
         });
         setCenterData((prev) => [created, ...(Array.isArray(prev) ? prev : [])]);
         pushToast('New Safe Haven initialized in the network.', 'success');
+        if (selectedEvent && Number.isFinite(Number(created?.latitude)) && Number.isFinite(Number(created?.longitude))) {
+          sessionStorage.setItem('drrms:pendingRoute', JSON.stringify({
+            origin: {
+              lat: Number(selectedEvent.latitude),
+              lng: Number(selectedEvent.longitude),
+              label: selectedEvent.location || selectedEvent.disaster_type || 'Incident',
+            },
+            destination: {
+              lat: Number(created.latitude),
+              lng: Number(created.longitude),
+              label: created.location || created.name || 'Evacuation Center',
+            },
+          }));
+          navigate('/manage/dashboard');
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('drrms:showRoute', {
+              detail: {
+                origin: {
+                  lat: Number(selectedEvent.latitude),
+                  lng: Number(selectedEvent.longitude),
+                  label: selectedEvent.location || selectedEvent.disaster_type || 'Incident',
+                },
+                destination: {
+                  lat: Number(created.latitude),
+                  lng: Number(created.longitude),
+                  label: created.location || created.name || 'Evacuation Center',
+                },
+              },
+            }));
+          }, 220);
+        }
       }
       setShelterModalOpen(false);
       resetShelterForm();
@@ -264,6 +335,57 @@ const ManageEvacuation = () => {
                     <h3 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 400, color: '#fff' }}>{shelter.name}</h3>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                       <span className="mono-label" style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.1)', borderRadius: '99px' }}>Safe Haven</span>
+                      <button
+                        className="edit-icon-btn"
+                        title="Locate on map"
+                        aria-label={`Locate ${shelter.name} on map`}
+                        onClick={() => {
+                          const center = (centerData || []).find((item) => (item.id || item._id) === shelter.id) || {};
+                          const linkedEvent = (disasterEvents || []).find((event) => (event.id || event._id) === center.event_id);
+                          const shelterLat = center.latitude;
+                          const shelterLng = center.longitude;
+                          const shelterLabel = center.location || center.name || shelter.name || '';
+                          const originLat = linkedEvent?.latitude;
+                          const originLng = linkedEvent?.longitude;
+                          const originLabel = linkedEvent?.location || linkedEvent?.disaster_type || 'Incident';
+                          navigate('/manage/dashboard');
+                          setTimeout(() => {
+                            if (
+                              Number.isFinite(Number(originLat))
+                              && Number.isFinite(Number(originLng))
+                              && Number.isFinite(Number(shelterLat))
+                              && Number.isFinite(Number(shelterLng))
+                            ) {
+                              const routePayload = {
+                                origin: {
+                                  lat: Number(originLat),
+                                  lng: Number(originLng),
+                                  label: originLabel,
+                                },
+                                destination: {
+                                  lat: Number(shelterLat),
+                                  lng: Number(shelterLng),
+                                  label: shelterLabel,
+                                },
+                              };
+                              sessionStorage.setItem('drrms:pendingRoute', JSON.stringify(routePayload));
+                              window.dispatchEvent(new CustomEvent('drrms:showRoute', { detail: routePayload }));
+                              return;
+                            }
+                            if (Number.isFinite(Number(shelterLat)) && Number.isFinite(Number(shelterLng))) {
+                              window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { lat: Number(shelterLat), lng: Number(shelterLng), label: shelterLabel } }));
+                              return;
+                            }
+                            if (shelterLabel) {
+                              window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { region: shelterLabel } }));
+                              return;
+                            }
+                            pushToast('No location data available for this shelter.', 'warning');
+                          }, 220);
+                        }}
+                      >
+                        <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>my_location</span>
+                      </button>
                       <button
                         className="edit-icon-btn"
                         title="Edit center"
@@ -337,6 +459,45 @@ const ManageEvacuation = () => {
           onLocationDetail={handleLocationDetail}
           onCoordinates={handleCoordinates}
         />
+        <div className="labs-form-group">
+          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Selected Location</span>
+            <button
+              type="button"
+              className="labs-btn-ghost"
+              onClick={() => {
+                if (latitude && longitude) {
+                  window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { lat: Number(latitude), lng: Number(longitude), label: location || '' } }));
+                  return;
+                }
+                const label = locationDetail ? [locationDetail.barangay, locationDetail.city, locationDetail.province].filter(Boolean).join(', ') : location;
+                if (label) {
+                  window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { region: label } }));
+                  return;
+                }
+                pushToast('No coordinates or location available to locate on map.', 'warning');
+              }}
+            >Locate</button>
+          </label>
+          <div
+            className="labs-input labs-input--readonly"
+            style={{ minHeight: '40px', display: 'flex', alignItems: 'center', gap: '8px' }}
+            aria-live="polite"
+          >
+            {(() => {
+              if (locationDetail) {
+                const parts = [];
+                if (locationDetail.barangay) parts.push(locationDetail.barangay);
+                if (locationDetail.city) parts.push(locationDetail.city);
+                if (locationDetail.province) parts.push(locationDetail.province);
+                return parts.length ? parts.join(', ') : (location || `${latitude || ''}${latitude && longitude ? ', ' : ''}${longitude || ''}` || 'Not set');
+              }
+              if (location) return location;
+              if (latitude && longitude) return `${latitude}, ${longitude}`;
+              return 'Not set';
+            })()}
+          </div>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
           <div className="labs-form-group">
             <label>Latitude</label>

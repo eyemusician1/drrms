@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
 import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
@@ -7,8 +8,10 @@ import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
 import { sanitizeTextInput } from '../../utils/formGuards';
 import './ManagePages.css';
+import useRequireAuth from '../../hooks/useRequireAuth';
 
 const ManageTeams = () => {
+  useRequireAuth();
   const [isTeamModalOpen, setTeamModalOpen] = useState(false);
   const [unitName, setUnitName] = useState('');
   const [contact, setContact] = useState('');
@@ -16,6 +19,8 @@ const ManageTeams = () => {
   const [specialization, setSpecialization] = useState('');
   const [assignedEventId, setAssignedEventId] = useState('');
   const [operationZone, setOperationZone] = useState('');
+  const [operationZoneDetail, setOperationZoneDetail] = useState(null);
+  const [operationZoneCoords, setOperationZoneCoords] = useState({ lat: null, lng: null });
   const [errors, setErrors] = useState({});
   const [toasts, setToasts] = useState([]);
   const { request } = useApi();
@@ -190,9 +195,16 @@ const ManageTeams = () => {
   const standbyCount = teams.filter(t => t.status === 'Standby').length;
   const eventOptions = (disasterEvents || []).map((event) => {
     const eventId = event.id || event._id || 'DR-000';
-    const label = event.disaster_type || eventId;
+    const loc = event.location || (Number.isFinite(event.latitude) && Number.isFinite(event.longitude)
+      ? `${Number(event.latitude).toFixed(4)}, ${Number(event.longitude).toFixed(4)}`
+      : 'Unknown area');
+    const type = event.disaster_type || 'Event';
+    const label = `${type} — ${loc}`;
     return { label, value: eventId };
   });
+
+  const selectedAssignedEvent = (disasterEvents || []).find((e) => (e.id || e._id) === assignedEventId);
+  const navigate = useNavigate();
 
   // --- STABLE CALLBACK TO PREVENT INFINITE RENDERING LOOPS ---
   const handleOperationZoneChange = useCallback((value) => {
@@ -352,12 +364,84 @@ const ManageTeams = () => {
             placeholder={eventOptions.length ? 'Select event' : 'No active events'}
           />
         </div>
+        <div className="labs-form-group">
+          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Assigned Event Location</span>
+            <button
+              type="button"
+              className="labs-btn-ghost"
+              onClick={() => {
+                if (!selectedAssignedEvent) {
+                  pushToast('No event selected.', 'warning');
+                  return;
+                }
+                const lat = selectedAssignedEvent.latitude;
+                const lng = selectedAssignedEvent.longitude;
+                const label = selectedAssignedEvent.location || selectedAssignedEvent.disaster_type || '';
+                navigate('/manage/dashboard');
+                setTimeout(() => {
+                  if (lat != null && lng != null) {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { lat: Number(lat), lng: Number(lng), label } }));
+                  } else if (label) {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { region: label } }));
+                  } else {
+                    pushToast('Event has no location data.', 'warning');
+                  }
+                }, 220);
+              }}
+            >Locate</button>
+          </label>
+          <div className="labs-input labs-input--readonly" style={{ minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+            {selectedAssignedEvent ? (selectedAssignedEvent.location || (selectedAssignedEvent.latitude && selectedAssignedEvent.longitude ? `${selectedAssignedEvent.latitude}, ${selectedAssignedEvent.longitude}` : 'Location not available')) : 'No event selected'}
+          </div>
+        </div>
         <PhilippinesLocationPicker
           label="Operation Zone (Optional)"
           includeBarangay={false}
           autoResolveCoordinates={false}
           onChange={handleOperationZoneChange}
+          onLocationDetail={(d) => setOperationZoneDetail(d)}
+          onCoordinates={(c) => setOperationZoneCoords(c)}
         />
+        <div className="labs-form-group" style={{ marginTop: '0.5rem' }}>
+          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Selected Operation Zone</span>
+            <button
+              type="button"
+              className="labs-btn-ghost"
+              onClick={() => {
+                const { lat, lng } = operationZoneCoords;
+                const label = operationZoneDetail ? [operationZoneDetail.barangay, operationZoneDetail.city, operationZoneDetail.province].filter(Boolean).join(', ') : operationZone;
+                navigate('/manage/dashboard');
+                setTimeout(() => {
+                  if (lat && lng) {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { lat: Number(lat), lng: Number(lng), label } }));
+                    return;
+                  }
+                  if (label) {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { region: label } }));
+                    return;
+                  }
+                  pushToast('No operation zone coordinates available.', 'warning');
+                }, 220);
+              }}
+            >Locate</button>
+          </label>
+          <div className="labs-input labs-input--readonly" style={{ minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+            {(() => {
+              if (operationZoneDetail) {
+                const parts = [];
+                if (operationZoneDetail.barangay) parts.push(operationZoneDetail.barangay);
+                if (operationZoneDetail.city) parts.push(operationZoneDetail.city);
+                if (operationZoneDetail.province) parts.push(operationZoneDetail.province);
+                return parts.length ? parts.join(', ') : (operationZone || (operationZoneCoords.lat && operationZoneCoords.lng ? `${operationZoneCoords.lat}, ${operationZoneCoords.lng}` : 'Not set'));
+              }
+              if (operationZone) return operationZone;
+              if (operationZoneCoords.lat && operationZoneCoords.lng) return `${operationZoneCoords.lat}, ${operationZoneCoords.lng}`;
+              return 'Not set';
+            })()}
+          </div>
+        </div>
       </Modal>
 
       <Modal

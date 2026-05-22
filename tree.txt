@@ -159,6 +159,7 @@ C:\ITD110\DRRMS
         |   |
         |   +---public
         |   |       Dashboard.jsx
+        |   |       Dashboard.css
         |   |       Disasters.jsx
         |   |       DisasterDetail.jsx
         |   |       Evacuation.jsx

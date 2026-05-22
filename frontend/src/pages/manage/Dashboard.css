@@ -18,12 +18,8 @@
   align-items: flex-end;
   margin-bottom: 32px;
   flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.92) 60%, rgba(0, 0, 0, 0) 100%);
+  position: relative;
   padding: 24px 0 12px;
-  backdrop-filter: blur(6px);
 }
 
 .view-header h1 {
@@ -158,7 +154,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
-  max-height: 320px;
+  max-height: none;
   overflow: hidden;
 }
 
@@ -168,6 +164,81 @@
   min-height: 0;
   overflow-y: auto;
   padding-right: 8px;
+}
+
+.feed-column.is-collapsed {
+  overflow: hidden;
+}
+
+.feed-dropdown-body {
+  animation: dropdownReveal 180ms ease-out;
+  transform-origin: top;
+}
+
+.feed-dropdown-trigger[aria-expanded="true"],
+.feed-dropdown-trigger:focus-visible {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.feed-dropdown-trigger .material-symbols-rounded {
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.feed-column.is-expanded .feed-dropdown-trigger .material-symbols-rounded {
+  transform: rotate(0deg);
+}
+
+.feed-dropdown-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 16px 18px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.feed-dropdown-trigger:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.feed-dropdown-title {
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.feed-dropdown-meta {
+  margin-left: auto;
+  color: #71717a;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.feed-dropdown-trigger .material-symbols-rounded {
+  font-size: 20px;
+  color: #a1a1aa;
+}
+
+.feed-column .incident-list {
+  margin-top: 12px;
+}
+
+@keyframes dropdownReveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scaleY(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
 }
 
 .feed-column::-webkit-scrollbar { width: 4px; }

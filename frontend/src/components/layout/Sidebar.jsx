@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import Modal from '../ui/Modal';
 import './Sidebar.css';
 
 const Sidebar = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();
 
@@ -47,15 +50,41 @@ const Sidebar = () => {
         <button
           className="logout-btn"
           title={isCollapsed ? "Logout" : ""}
-          onClick={async () => {
-            await logout();
-            navigate('/');
-          }}
+          onClick={() => setIsLogoutModalOpen(true)}
         >
           <span className="material-symbols-rounded">logout</span>
           {!isCollapsed && <span className="link-label">Logout</span>}
         </button>
       </div>
+
+      <Modal
+        isOpen={isLogoutModalOpen}
+        onClose={() => {
+          if (!isLoggingOut) setIsLogoutModalOpen(false);
+        }}
+        title="Log out of DRRMS?"
+        actionText={isLoggingOut ? 'Logging out...' : 'Logout'}
+        onAction={async () => {
+          setIsLoggingOut(true);
+          try {
+            await logout();
+            setIsLogoutModalOpen(false);
+            navigate('/');
+          } finally {
+            setIsLoggingOut(false);
+          }
+        }}
+      >
+        <div className="logout-modal-copy">
+          <div className="logout-modal-alert">
+            <span className="material-symbols-rounded">info</span>
+            <span>You will be returned to the public landing page.</span>
+          </div>
+          <p>
+            This will end your current session on this device. You can sign in again anytime.
+          </p>
+        </div>
+      </Modal>
     </aside>
   );
 };

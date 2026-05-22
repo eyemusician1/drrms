@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
 import Toast from '../../components/ui/Toast'; // <-- Import Toast
@@ -6,8 +7,10 @@ import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
 import { digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
 import './ManagePages.css';
+import useRequireAuth from '../../hooks/useRequireAuth';
 
 const ManageRelief = () => {
+  useRequireAuth();
   const [isSupplyModalOpen, setSupplyModalOpen] = useState(false);
   const [category, setCategory] = useState('');
   const [eventId, setEventId] = useState('');
@@ -19,6 +22,7 @@ const ManageRelief = () => {
   const [toasts, setToasts] = useState([]);
   const { data: reliefOperations, setData: setReliefOperations } = useRealtimeStream('/api/v1/stream/relief', []);
   const { data: disasterEvents } = useRealtimeStream('/api/v1/stream/disasters', []);
+  const { data: responseTeams } = useRealtimeStream('/api/v1/stream/teams', []);
   const { request } = useApi();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingOperationId, setEditingOperationId] = useState('');
@@ -47,9 +51,23 @@ const ManageRelief = () => {
   ];
   const eventOptions = (disasterEvents || []).map((event) => {
     const eventIdValue = event.id || event._id || 'DR-000';
-    const label = event.disaster_type || eventIdValue;
+    const loc = event.location || (Number.isFinite(event.latitude) && Number.isFinite(event.longitude)
+      ? `${Number(event.latitude).toFixed(4)}, ${Number(event.longitude).toFixed(4)}`
+      : 'Unknown area');
+    const type = event.disaster_type || 'Event';
+    const label = `${type} — ${loc}`;
     return { label, value: eventIdValue };
   });
+  const teamOptions = (responseTeams || []).map((team) => {
+    const teamId = team.id || team._id || 'TEAM-000';
+    const teamName = team.team_name || 'Response Team';
+    const specialization = team.specialization ? ` — ${team.specialization}` : '';
+    const contact = team.contact ? ` · ${team.contact}` : '';
+    return { label: `${teamName}${specialization}${contact}`, value: teamId };
+  });
+  const selectedReliefEvent = (disasterEvents || []).find((e) => (e.id || e._id) === eventId);
+  const selectedHandledByTeam = (responseTeams || []).find((team) => (team.id || team._id) === handledByTeamId);
+  const navigate = useNavigate();
 
   const pushToast = (message, type = 'info') => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -266,6 +284,37 @@ const ManageRelief = () => {
           />
         </div>
         <div className="labs-form-group">
+          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Event Location</span>
+            <button
+              type="button"
+              className="labs-btn-ghost"
+              onClick={() => {
+                if (!selectedReliefEvent) {
+                  pushToast('No event selected.', 'warning');
+                  return;
+                }
+                const lat = selectedReliefEvent.latitude;
+                const lng = selectedReliefEvent.longitude;
+                const label = selectedReliefEvent.location || selectedReliefEvent.disaster_type || '';
+                navigate('/manage/dashboard');
+                setTimeout(() => {
+                  if (lat != null && lng != null) {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { lat: Number(lat), lng: Number(lng), label } }));
+                  } else if (label) {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { region: label } }));
+                  } else {
+                    pushToast('Event has no location data.', 'warning');
+                  }
+                }, 220);
+              }}
+            >Locate</button>
+          </label>
+          <div className="labs-input labs-input--readonly" style={{ minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+            {selectedReliefEvent ? (selectedReliefEvent.location || (selectedReliefEvent.latitude && selectedReliefEvent.longitude ? `${selectedReliefEvent.latitude}, ${selectedReliefEvent.longitude}` : 'Location not available')) : 'No event selected'}
+          </div>
+        </div>
+        <div className="labs-form-group">
           <label>Resource Category</label>
           <LabsDropdown
             options={[
@@ -332,14 +381,18 @@ const ManageRelief = () => {
         </div>
         <div className="labs-form-group">
           <label>Handled By Team ID (Optional)</label>
-          <input
-            type="text"
-            className="labs-input"
-            placeholder="Response Team ID"
+          <LabsDropdown
+            options={teamOptions}
             value={handledByTeamId}
-            maxLength={80}
-            onChange={(e) => setHandledByTeamId(sanitizeTextInput(e.target.value, 80, 4))}
+            onChange={(value) => setHandledByTeamId(value)}
+            placeholder={teamOptions.length ? 'Select response team' : 'No response teams available'}
           />
+        </div>
+        <div className="labs-form-group">
+          <label>Selected Team</label>
+          <div className="labs-input labs-input--readonly" style={{ minHeight: '36px', display: 'flex', alignItems: 'center' }}>
+            {selectedHandledByTeam ? `${selectedHandledByTeam.team_name || 'Response Team'}${selectedHandledByTeam.specialization ? ` — ${selectedHandledByTeam.specialization}` : ''}` : 'No team selected'}
+          </div>
         </div>
       </Modal>
 

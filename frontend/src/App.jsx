@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 
 // Layout & Auth
 import Login from './pages/auth/Login';
+import PublicDashboard from './pages/public/Dashboard';
 import Sidebar from './components/layout/Sidebar';
 import ProtectedRoute from './components/layout/ProtectedRoute';
 
@@ -27,8 +28,11 @@ const AdminLayout = () => (
 function App() {
   return (
     <Routes>
-      {/* Public Landing / Login */}
-      <Route path="/" element={<Login />} />
+      {/* Public Landing */}
+      <Route path="/" element={<PublicDashboard />} />
+
+      {/* Authentication */}
+      <Route path="/login" element={<Login />} />
 
       {/* Admin Management Routes */}
       <Route
@@ -48,7 +52,7 @@ function App() {
         <Route path="*" element={<Navigate to="dashboard" replace />} />
       </Route>
 
-      {/* Catch-all: Redirect unknown paths to Login */}
+      {/* Catch-all: Redirect unknown paths to the public landing page */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

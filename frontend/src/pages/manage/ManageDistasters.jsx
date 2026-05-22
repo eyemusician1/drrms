@@ -9,6 +9,7 @@ import { coordinateOnly, digitsOnly, sanitizeTextInput } from '../../utils/formG
 import { locationFieldsFromDetail, toPickerValue } from '../../utils/locationValue';
 import { isWithinPhilippines } from '../../utils/philippinesGeo';
 import './ManagePages.css';
+import useRequireAuth from '../../hooks/useRequireAuth';
 
 // ---------------------------------------------------------------------------
 // Normalize MongoDB _id — Beanie may return { $oid: "..." } or a plain string
@@ -21,6 +22,7 @@ const normalizeId = (raw) => {
 };
 
 const ManageDisasters = () => {
+  useRequireAuth();
   const [isIncidentModalOpen, setIncidentModalOpen] = useState(false);
   const [disasterType, setDisasterType] = useState('');
   const [severity, setSeverity] = useState('');
