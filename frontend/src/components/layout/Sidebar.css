@@ -125,6 +125,35 @@
   margin-top: auto;
 }
 
+.logout-modal-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.logout-modal-copy p {
+  margin: 0;
+  color: #C4C7C5;
+  font-size: 0.96rem;
+  line-height: 1.6;
+}
+
+.logout-modal-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(168, 199, 250, 0.06);
+  border: 1px solid rgba(168, 199, 250, 0.16);
+  color: #E3E3E3;
+}
+
+.logout-modal-alert .material-symbols-rounded {
+  font-size: 20px;
+  color: #A8C7FA;
+}
+
 @media (max-width: 900px) {
   .labs-sidebar {
     width: 230px;

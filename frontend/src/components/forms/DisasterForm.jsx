@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PhilippinesLocationPicker from './PhilippinesLocationPicker';
 
 const DisasterForm = ({ onSubmit, onCancel, initialData = null }) => {
@@ -56,6 +57,7 @@ const DisasterForm = ({ onSubmit, onCancel, initialData = null }) => {
 
     onSubmit(payload);
   };
+  const navigate = useNavigate();
 
   return (
     <form onSubmit={handleSubmit} className="labs-form">
@@ -105,6 +107,49 @@ const DisasterForm = ({ onSubmit, onCancel, initialData = null }) => {
           onLocationDetail={(details) => setLocationDetails(details)}
           onCoordinates={(coords) => setCoordinates(coords)}
         />
+        <div className="labs-form-group" style={{ marginTop: '0.5rem' }}>
+          <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>Selected Location</span>
+            <button
+              type="button"
+              className="labs-btn-ghost"
+              onClick={() => {
+                const { lat, lng } = coordinates;
+                const label = locationLabel || (locationDetails && (locationDetails.barangay || locationDetails.city || locationDetails.province)) || '';
+                navigate('/manage/dashboard');
+                setTimeout(() => {
+                  if (lat && lng) {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { lat: Number(lat), lng: Number(lng), label } }));
+                    return;
+                  }
+                  if (label) {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { region: label } }));
+                    return;
+                  }
+                  pushToast('No coordinates or location available to locate on map.', 'warning');
+                }, 220);
+              }}
+            >Locate on map</button>
+          </label>
+          <div
+            className="labs-input labs-input--readonly"
+            style={{ minHeight: '36px', display: 'flex', alignItems: 'center', gap: '8px' }}
+            aria-live="polite"
+          >
+            {(() => {
+              if (locationDetails) {
+                const parts = [];
+                if (locationDetails.barangay) parts.push(locationDetails.barangay);
+                if (locationDetails.city) parts.push(locationDetails.city);
+                if (locationDetails.province) parts.push(locationDetails.province);
+                return parts.length ? parts.join(', ') : (locationLabel || (coordinates.lat && coordinates.lng ? `${coordinates.lat}, ${coordinates.lng}` : 'Not set'));
+              }
+              if (locationLabel) return locationLabel;
+              if (coordinates.lat && coordinates.lng) return `${coordinates.lat}, ${coordinates.lng}`;
+              return 'Not set';
+            })()}
+          </div>
+        </div>
       </div>
 
       <div className="labs-form-grid">

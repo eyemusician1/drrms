@@ -15,8 +15,10 @@ import {
   PHILIPPINES_DEFAULT_ZOOM,
 } from '../../utils/philippinesGeo';
 import './Dashboard.css';
+import useRequireAuth from '../../hooks/useRequireAuth';
 
 const Dashboard = () => {
+  useRequireAuth();
   const [isAlertModalOpen, setAlertModalOpen] = useState(false);
   const [alertType, setAlertType] = useState('');
   const [targetRegion, setTargetRegion] = useState('');
@@ -40,6 +42,10 @@ const Dashboard = () => {
   const [eventFeatures, setEventFeatures] = useState([]);
   const [centerFeatures, setCenterFeatures] = useState([]);
   const [routeFeature, setRouteFeature] = useState(null);
+  const [routeLabelFeature, setRouteLabelFeature] = useState(null);
+  const [manualRouteRequest, setManualRouteRequest] = useState(null);
+  const [isAlertsExpanded, setIsAlertsExpanded] = useState(false);
+  const [isIncidentsExpanded, setIsIncidentsExpanded] = useState(false);
   const [highlightFeature, setHighlightFeature] = useState(null);
   const [selectedFeedKey, setSelectedFeedKey] = useState('');
   const [isLocatingFeed, setIsLocatingFeed] = useState(false);
@@ -107,18 +113,61 @@ const Dashboard = () => {
       const url = `https://router.project-osrm.org/route/v1/driving/${origin.lng},${origin.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
       const response = await fetch(url);
       const json = await response.json();
-      const geometry = json?.routes?.[0]?.geometry;
+      const route = json?.routes?.[0];
+      const geometry = route?.geometry;
+      const duration = route?.duration; // seconds
+      const distance = route?.distance; // meters
       if (!geometry) return null;
-      const feature = {
+
+      // Line feature
+      const lineFeature = {
         type: 'Feature',
         geometry,
-        properties: {},
+        properties: {
+          distance,
+          duration,
+        },
       };
-      routeCacheRef.current.set(key, feature);
-      return feature;
+
+      // Create a midpoint label feature for ETA display
+      const coords = Array.isArray(geometry.coordinates) ? geometry.coordinates : [];
+      const midIndex = Math.floor(coords.length / 2) || 0;
+      const labelPoint = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: coords[midIndex] || [origin.lng, origin.lat] },
+        properties: {
+          label: duration ? `${Math.round(duration / 60)} min` : null,
+          distance,
+          duration,
+        },
+      };
+
+      const payload = { lineFeature, labelPoint };
+      routeCacheRef.current.set(key, payload);
+      return payload;
     } catch (err) {
       return null;
     }
+  };
+
+  const routeRequestKey = manualRouteRequest
+    ? `${manualRouteRequest.origin.lat},${manualRouteRequest.origin.lng}-${manualRouteRequest.destination.lat},${manualRouteRequest.destination.lng}`
+    : '';
+
+  const toggleAlertsFeed = () => {
+    setIsAlertsExpanded((value) => {
+      const nextValue = !value;
+      if (nextValue) setIsIncidentsExpanded(false);
+      return nextValue;
+    });
+  };
+
+  const toggleIncidentsFeed = () => {
+    setIsIncidentsExpanded((value) => {
+      const nextValue = !value;
+      if (nextValue) setIsAlertsExpanded(false);
+      return nextValue;
+    });
   };
 
   const buildEventFeatures = (events) => {
@@ -228,6 +277,39 @@ const Dashboard = () => {
     });
   };
 
+  // Global handler to allow other components to request the map to fly to a location
+  React.useEffect(() => {
+    const handler = async (e) => {
+      const d = e.detail || {};
+      try {
+        if (d.lat != null && d.lng != null) {
+          flyToCoordinates({ lat: Number(d.lat), lng: Number(d.lng), label: d.label || d.region || 'Selected' }, { zoom: d.zoom || 13 });
+          return;
+        }
+
+        // If a region string is provided, try parse first then geocode as fallback
+        if (d.region) {
+          const parsed = parseCoordinatesFromText(d.region);
+          if (parsed) {
+            flyToCoordinates(parsed, { zoom: d.zoom || 13 });
+            return;
+          }
+          const parts = parseRegionParts(d.region);
+          const coords = await geocodePhilippinesPlace(d.region, parts);
+          if (coords) {
+            flyToCoordinates(coords, { zoom: d.zoom || 13 });
+            return;
+          }
+        }
+        pushToast('Could not resolve location for map.', 'warning');
+      } catch (err) {
+        pushToast('Map locate failed.', 'error');
+      }
+    };
+    window.addEventListener('drrms:flyTo', handler);
+    return () => window.removeEventListener('drrms:flyTo', handler);
+  }, []);
+
   const resolveAlertCoordinates = async (warning) => {
     const region = warning.region || '';
     const fromText = parseCoordinatesFromText(region);
@@ -260,6 +342,8 @@ const Dashboard = () => {
   const handleFeedLocate = async (feedKey, resolver) => {
     setSelectedFeedKey(feedKey);
     setIsLocatingFeed(true);
+    setIsAlertsExpanded(false);
+    setIsIncidentsExpanded(false);
     try {
       const coords = await resolver();
       if (!coords) {
@@ -447,7 +531,7 @@ const Dashboard = () => {
         type: 'symbol',
         source: 'events',
         filter: ['!', ['has', 'point_count']],
-        minzoom: 8,
+        minzoom: 5,
         layout: {
           'text-field': ['get', 'label'],
           'text-size': 11,
@@ -511,7 +595,7 @@ const Dashboard = () => {
         type: 'symbol',
         source: 'centers',
         filter: ['!', ['has', 'point_count']],
-        minzoom: 8,
+        minzoom: 5,
         layout: {
           'text-field': ['get', 'label'],
           'text-size': 11,
@@ -528,10 +612,44 @@ const Dashboard = () => {
         type: 'line',
         source: 'route',
         paint: {
-          'line-color': 'rgba(168,199,250,0.9)',
-          'line-width': 3,
-          'line-opacity': 0.85,
+          'line-color': 'rgba(168,199,250,0.95)',
+          'line-width': 6,
+          'line-opacity': 0.95,
+          'line-gap-width': 0,
           'line-opacity-transition': { duration: 400 },
+        },
+      });
+
+      // Glow / outline underneath for better visibility
+      map.addLayer({
+        id: 'route-outline',
+        type: 'line',
+        source: 'route',
+        paint: {
+          'line-color': 'rgba(20,30,40,0.85)',
+          'line-width': 12,
+          'line-opacity': 0.6,
+        },
+        beforeId: 'route-line',
+      });
+
+      // Symbol layer for route ETA label (uses the point feature in the same source)
+      map.addLayer({
+        id: 'route-label',
+        type: 'symbol',
+        source: 'route',
+        layout: {
+          'text-field': ['coalesce', ['get', 'label'], ''],
+          'text-size': 14,
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          'text-offset': [0, -1.2],
+          'text-anchor': 'bottom',
+          'icon-image': 'marker-15',
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': 'rgba(0,0,0,0.7)',
+          'text-halo-width': 1.5,
         },
       });
 
@@ -636,8 +754,24 @@ useEffect(() => {
   useEffect(() => {
     let isActive = true;
     const buildRoute = async () => {
+      if (manualRouteRequest?.origin && manualRouteRequest?.destination) {
+        const route = await fetchRoute(manualRouteRequest.origin, manualRouteRequest.destination);
+        if (isActive) {
+          if (route) {
+            setRouteFeature(route.lineFeature || null);
+            setRouteLabelFeature(route.labelPoint || null);
+          } else {
+            setRouteFeature(null);
+            setRouteLabelFeature(null);
+          }
+        }
+        return;
+      }
       if (!eventFeatures.length || !centerFeatures.length) {
-        if (isActive) setRouteFeature(null);
+        if (isActive) {
+          setRouteFeature(null);
+          setRouteLabelFeature(null);
+        }
         return;
       }
       const origin = eventFeatures.find((feature) => feature.properties?.is_latest) || eventFeatures[0];
@@ -663,21 +797,57 @@ useEffect(() => {
         return;
       }
       const route = await fetchRoute(originCoords, nearest);
-      if (isActive) setRouteFeature(route);
+      if (isActive) {
+        if (route) {
+          setRouteFeature(route.lineFeature || null);
+          setRouteLabelFeature(route.labelPoint || null);
+        } else {
+          setRouteFeature(null);
+          setRouteLabelFeature(null);
+        }
+      }
     };
     buildRoute();
     return () => {
       isActive = false;
     };
-  }, [eventFeatures, centerFeatures]);
+  }, [eventFeatures, centerFeatures, manualRouteRequest, routeRequestKey]);
+
+  useEffect(() => {
+    const storedRoute = sessionStorage.getItem('drrms:pendingRoute');
+    if (storedRoute) {
+      try {
+        const parsed = JSON.parse(storedRoute);
+        if (parsed?.origin && parsed?.destination) {
+          setManualRouteRequest(parsed);
+        }
+      } catch (err) {
+        // Ignore malformed persisted route data.
+      }
+      sessionStorage.removeItem('drrms:pendingRoute');
+    }
+
+    const handler = (e) => {
+      const detail = e.detail || {};
+      const { origin, destination } = detail;
+      if (!origin || !destination) return;
+      sessionStorage.setItem('drrms:pendingRoute', JSON.stringify({ origin, destination }));
+      setManualRouteRequest({ origin, destination });
+    };
+    window.addEventListener('drrms:showRoute', handler);
+    return () => window.removeEventListener('drrms:showRoute', handler);
+  }, []);
 
   useEffect(() => {
     if (!mapReadyRef.current || !mapRef.current) return;
     const source = mapRef.current.getSource('route');
     if (source?.setData) {
-      source.setData(routeFeature ? featureCollection([routeFeature]) : featureCollection([]));
+      const features = [];
+      if (routeFeature) features.push(routeFeature);
+      if (routeLabelFeature) features.push(routeLabelFeature);
+      source.setData(featureCollection(features));
     }
-  }, [routeFeature]);
+  }, [routeFeature, routeLabelFeature]);
 
   useEffect(() => {
     if (!mapReadyRef.current || !mapRef.current) return;
@@ -837,113 +1007,134 @@ useEffect(() => {
 
         <div className="telemetry-layout">
           <div className="feed-panel">
-            <div className="feed-column alert-panel">
-              <div className="section-title" style={{ marginBottom: '12px' }}>
-                <h2>System Alerts</h2>
-                <span className="mono-label" style={{ fontSize: '0.7rem' }}>Click to locate on map</span>
-              </div>
-              <div className="incident-list">
-                {recentAlerts.length === 0 ? (
-                  <div className="incident-row">
-                    <div className="incident-row-header">
-                      <span className="mono-label">No alerts yet</span>
-                    </div>
-                    <div className="incident-type">Broadcast an alert to populate this feed.</div>
-                  </div>
-                ) : (
-                  recentAlerts.map((alert) => (
-                    <div
-                      className={`incident-row${selectedFeedKey === `alert:${alert.id}` ? ' is-selected' : ''}${isLocatingFeed && selectedFeedKey === `alert:${alert.id}` ? ' is-locating' : ''}`}
-                      key={alert.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleAlertClick(alert)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleAlertClick(alert);
-                        }
-                      }}
-                    >
-                      <div className="incident-row-header">
-                        <span className="mono-label">{alert.label}</span>
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                          <span className="alert-badge">{alert.disaster}</span>
-                          <button
-                            type="button"
-                            className="edit-icon-btn"
-                            title="Edit alert"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditAlert(alert.raw);
-                            }}
-                          >
-                            <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>edit</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="delete-icon-btn"
-                            title="Delete alert"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteAlert(alert.raw);
-                            }}
-                          >
-                            <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>delete</span>
-                          </button>
+            <div className={`feed-column alert-panel${isAlertsExpanded ? ' is-expanded' : ' is-collapsed'}`}>
+              <button
+                type="button"
+                className="feed-dropdown-trigger"
+                aria-expanded={isAlertsExpanded}
+                onClick={toggleAlertsFeed}
+              >
+                <span className="feed-dropdown-title">System Alerts</span>
+                <span className="feed-dropdown-meta">{recentAlerts.length} items</span>
+                <span className="material-symbols-rounded">{isAlertsExpanded ? 'expand_less' : 'expand_more'}</span>
+              </button>
+              {isAlertsExpanded && (
+                <div className="feed-dropdown-body">
+                  <div className="incident-list">
+                    {recentAlerts.length === 0 ? (
+                      <div className="incident-row">
+                        <div className="incident-row-header">
+                          <span className="mono-label">No alerts yet</span>
                         </div>
+                        <div className="incident-type">Broadcast an alert to populate this feed.</div>
                       </div>
-                      <div className="incident-type">{alert.type}</div>
-                      <div className="incident-location">
-                        <span className="material-symbols-rounded">campaign</span>
-                        {alert.region}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            <div className="feed-column">
-              <div className="section-title" style={{ marginBottom: '12px' }}>
-                <h2>Incident Feed</h2>
-                <span className="mono-label" style={{ fontSize: '0.7rem' }}>Click to locate on map</span>
-              </div>
-              <div className="incident-list">
-                {recentEvents.length === 0 ? (
-                  <div className="incident-row">
-                    <div className="incident-row-header">
-                      <span className="mono-label">No incidents</span>
-                    </div>
-                    <div className="incident-type">Log an incident to see it here and on the map.</div>
+                    ) : (
+                      recentAlerts.map((alert) => (
+                        <div
+                          className={`incident-row${selectedFeedKey === `alert:${alert.id}` ? ' is-selected' : ''}${isLocatingFeed && selectedFeedKey === `alert:${alert.id}` ? ' is-locating' : ''}`}
+                          key={alert.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleAlertClick(alert)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleAlertClick(alert);
+                            }
+                          }}
+                        >
+                          <div className="incident-row-header">
+                            <span className="mono-label">{alert.label}</span>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <span className="alert-badge">{alert.disaster}</span>
+                              <button
+                                type="button"
+                                className="edit-icon-btn"
+                                title="Edit alert"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditAlert(alert.raw);
+                                }}
+                              >
+                                <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="delete-icon-btn"
+                                title="Delete alert"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteAlert(alert.raw);
+                                }}
+                              >
+                                <span className="material-symbols-rounded" style={{ fontSize: '16px' }}>delete</span>
+                              </button>
+                            </div>
+                          </div>
+                          <div className="incident-type">{alert.type}</div>
+                          <div className="incident-location">
+                            <span className="material-symbols-rounded">campaign</span>
+                            {alert.region}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
-                ) : (
-                  recentEvents.map((event) => (
-                    <div
-                      className={`incident-row severity-${event.severity.toLowerCase()}${selectedFeedKey === `incident:${event.id}` ? ' is-selected' : ''}${isLocatingFeed && selectedFeedKey === `incident:${event.id}` ? ' is-locating' : ''}`}
-                      key={event.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleIncidentClick(event)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleIncidentClick(event);
-                        }
-                      }}
-                    >
-                      <div className="incident-row-header">
-                        <span className="mono-label">{event.type}</span>
-                        <span className="severity-badge">{event.severity}</span>
+                </div>
+              )}
+            </div>
+
+            <div className={`feed-column${isIncidentsExpanded ? ' is-expanded' : ' is-collapsed'}`}>
+              <button
+                type="button"
+                className="feed-dropdown-trigger"
+                aria-expanded={isIncidentsExpanded}
+                onClick={toggleIncidentsFeed}
+              >
+                <span className="feed-dropdown-title">Incident Feed</span>
+                <span className="feed-dropdown-meta">{recentEvents.length} items</span>
+                <span className="material-symbols-rounded">{isIncidentsExpanded ? 'expand_less' : 'expand_more'}</span>
+              </button>
+              {isIncidentsExpanded && (
+                <div className="feed-dropdown-body">
+                  <div className="incident-list">
+                    {recentEvents.length === 0 ? (
+                      <div className="incident-row">
+                        <div className="incident-row-header">
+                          <span className="mono-label">No incidents</span>
+                        </div>
+                        <div className="incident-type">Log an incident to see it here and on the map.</div>
                       </div>
-                      <div className="incident-type">{event.type}</div>
-                      <div className="incident-location">
-                        <span className="material-symbols-rounded">my_location</span>
-                        {event.zone}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+                    ) : (
+                      recentEvents.map((event) => (
+                        <div
+                          className={`incident-row severity-${event.severity.toLowerCase()}${selectedFeedKey === `incident:${event.id}` ? ' is-selected' : ''}${isLocatingFeed && selectedFeedKey === `incident:${event.id}` ? ' is-locating' : ''}`}
+                          key={event.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => handleIncidentClick(event)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleIncidentClick(event);
+                            }
+                          }}
+                        >
+                          <div className="incident-row-header">
+                            <span className="mono-label">{event.type}</span>
+                            <span className="severity-badge">{event.severity}</span>
+                          </div>
+                          <div className="incident-type">{event.type}</div>
+                          <div className="incident-location">
+                            <span className="material-symbols-rounded">my_location</span>
+                            {event.zone}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
