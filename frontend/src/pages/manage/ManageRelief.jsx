@@ -273,6 +273,7 @@ const ManageRelief = () => {
         <div className="labs-form-group">
           <label>Event ID</label>
           <LabsDropdown
+            searchable
             options={eventOptions}
             value={eventId}
             onChange={(value) => {
@@ -382,6 +383,7 @@ const ManageRelief = () => {
         <div className="labs-form-group">
           <label>Handled By Team ID (Optional)</label>
           <LabsDropdown
+            searchable
             options={teamOptions}
             value={handledByTeamId}
             onChange={(value) => setHandledByTeamId(value)}

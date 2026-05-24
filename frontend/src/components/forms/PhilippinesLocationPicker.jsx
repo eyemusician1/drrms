@@ -359,6 +359,7 @@ const PhilippinesLocationPicker = ({
         <div className="labs-form-group">
           <label>Province</label>
           <LabsDropdown
+            searchable //enable search for provinces
             options={provinceOptions}
             value={provinceCode}
             onChange={(next) => setProvinceCode(next)}
@@ -368,6 +369,7 @@ const PhilippinesLocationPicker = ({
         <div className="labs-form-group">
           <label>City / Municipality</label>
           <LabsDropdown
+            searchable //enable search for cities/municipalities
             options={cityMunicipalityOptions}
             value={cityMunicipalityCode ? `${cityMunicipalityType}:${cityMunicipalityCode}` : ''}
             onChange={(next) => {
@@ -383,6 +385,7 @@ const PhilippinesLocationPicker = ({
         <div className="labs-form-group">
           <label>Barangay</label>
           <LabsDropdown
+            searchable  //enable search for barangays
             options={barangayOptions}
             value={barangayCode}
             onChange={(next) => setBarangayCode(next)}

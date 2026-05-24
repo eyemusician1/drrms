@@ -428,6 +428,7 @@ const ManageEvacuation = () => {
         <div className="labs-form-group">
           <label>Event ID</label>
           <LabsDropdown
+            searchable
             options={eventOptions}
             value={eventId}
             onChange={(value) => {

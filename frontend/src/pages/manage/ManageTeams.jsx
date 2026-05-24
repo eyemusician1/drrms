@@ -357,7 +357,9 @@ const ManageTeams = () => {
         </div>
         <div className="labs-form-group">
           <label>Assigned Event</label>
+          {/* added`searchable` so the user can type to filter events*/}
           <LabsDropdown
+            searchable
             options={eventOptions}
             value={assignedEventId}
             onChange={(value) => setAssignedEventId(value)}
