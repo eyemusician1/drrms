@@ -1,14 +1,21 @@
 export const sanitizeTextInput = (value, maxLength = 200, maxWords = 0) => {
   const normalized = String(value ?? '')
     .replace(/[<>]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+    .replace(/\s+/g, ' ');
 
-  const wordLimited = maxWords > 0
-    ? normalized.split(' ').filter(Boolean).slice(0, maxWords).join(' ')
-    : normalized;
+    //removed trim for spacing not working
 
-  return wordLimited.slice(0, maxLength);
+  if (maxWords > 0) {
+    // fixes the issue where users can't type more words space not yet still working
+    const endsWithSpace = normalized.endsWith(' ');
+    const words = normalized.split(' ').filter(Boolean);
+    const capped = words.slice(0, maxWords).join(' ');
+    // preserve the trailing space so the user can keep typing the next word
+    const wordLimited = endsWithSpace && words.length < maxWords ? capped + ' ' : capped;
+    return wordLimited.slice(0, maxLength);
+  }
+ 
+  return normalized.slice(0, maxLength);
 };
 
 export const digitsOnly = (value, maxDigits = 6) => (
