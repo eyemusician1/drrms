@@ -1,12 +1,16 @@
 export const sanitizeTextInput = (value, maxLength = 200, maxWords = 0) => {
-  const normalized = String(value ?? '')
-    .replace(/[<>]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const raw = String(value ?? '').replace(/[<>]/g, '');
+  const normalized = raw.replace(/\s+/g, ' ');
+  const hasTrailingSpace = /\s$/.test(raw);
 
-  const wordLimited = maxWords > 0
-    ? normalized.split(' ').filter(Boolean).slice(0, maxWords).join(' ')
-    : normalized;
+  const trimmed = normalized.trim();
+  const words = trimmed ? trimmed.split(' ') : [];
+  const limitedWords = maxWords > 0 ? words.slice(0, maxWords) : words;
+  let wordLimited = limitedWords.join(' ');
+
+  if (hasTrailingSpace && (!maxWords || limitedWords.length < maxWords) && wordLimited) {
+    wordLimited += ' ';
+  }
 
   return wordLimited.slice(0, maxLength);
 };

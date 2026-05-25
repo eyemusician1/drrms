@@ -363,6 +363,8 @@ const PhilippinesLocationPicker = ({
             value={provinceCode}
             onChange={(next) => setProvinceCode(next)}
             placeholder="Select province"
+            searchable
+            searchPlaceholder="Search province"
           />
         </div>
         <div className="labs-form-group">
@@ -376,6 +378,8 @@ const PhilippinesLocationPicker = ({
               setCityMunicipalityCode(code);
             }}
             placeholder={provinceCode ? 'Select city or municipality' : 'Select province first'}
+            searchable
+            searchPlaceholder="Search city or municipality"
           />
         </div>
       </div>
