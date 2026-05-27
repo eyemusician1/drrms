@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
-import Toast from '../../components/ui/Toast'; // <-- Import Toast
+import TypeaheadInput from '../../components/ui/TypeaheadInput';
+import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
 import { digitsOnly, sanitizeTextInput } from '../../utils/formGuards';
@@ -272,15 +273,14 @@ const ManageRelief = () => {
       >
         <div className="labs-form-group">
           <label>Event ID</label>
-          <LabsDropdown
-            searchable
-            options={eventOptions}
-            value={eventId}
+          <TypeaheadInput
+            options={eventOptions} //selects what options to use
+            value={eventId} //empty at first, pre-filled when has a value
             onChange={(value) => {
               setEventId(value);
               if (errors.eventId) setErrors((prev) => ({ ...prev, eventId: false }));
             }}
-            placeholder={eventOptions.length ? 'Select event' : 'No active events'}
+            placeholder={eventOptions.length ? 'Type to search event...' : 'No active events'}
             hasError={errors.eventId}
           />
         </div>
@@ -382,12 +382,11 @@ const ManageRelief = () => {
         </div>
         <div className="labs-form-group">
           <label>Handled By Team ID (Optional)</label>
-          <LabsDropdown
-            searchable
+          <TypeaheadInput
             options={teamOptions}
             value={handledByTeamId}
             onChange={(value) => setHandledByTeamId(value)}
-            placeholder={teamOptions.length ? 'Select response team' : 'No response teams available'}
+            placeholder={teamOptions.length ? 'Type to search team...' : 'No response teams available'}
           />
         </div>
         <div className="labs-form-group">
