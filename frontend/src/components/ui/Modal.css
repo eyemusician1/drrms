@@ -245,6 +245,37 @@
   font-weight: 500;
 }
 
+.labs-dropdown-search-wrap {
+  padding: 6px 12px 8px;
+  position: sticky;
+  top: 0;
+  background: #1E1E20;
+  z-index: 1;
+}
+
+.labs-dropdown-search {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid #444746;
+  color: #E3E3E3;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  outline: none;
+}
+
+.labs-dropdown-search:focus {
+  border-color: #A8C7FA;
+  box-shadow: inset 0 0 0 1px #A8C7FA;
+  background: rgba(168, 199, 250, 0.04);
+}
+
+.labs-dropdown-empty {
+  padding: 10px 16px 14px;
+  color: #8E918F;
+  font-size: 0.9rem;
+}
+
 /* --- BUTTONS (STRICTLY MOTIONLESS) --- */
 .labs-btn-large {
   background: #E3E3E3;
