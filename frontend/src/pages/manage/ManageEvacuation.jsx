@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
 import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
+import TypeaheadInput from '../../components/ui/TypeaheadInput';
 import Toast from '../../components/ui/Toast'; // <-- Import Toast
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
 import { useApi } from '../../hooks/useApi';
@@ -427,14 +428,14 @@ const ManageEvacuation = () => {
       >
         <div className="labs-form-group">
           <label>Event ID</label>
-          <LabsDropdown
+          <TypeaheadInput
             options={eventOptions}
             value={eventId}
             onChange={(value) => {
               setEventId(value);
-              if (errors.eventId) setErrors((prev) => ({ ...prev, eventId: false }));
+              if (errors.eventId) setErrors((prev) => ({...prev, eventId: false}));
             }}
-            placeholder={eventOptions.length ? 'Select event' : 'No active events'}
+            placeholder={eventOptions.length ? 'Type to search event...' : 'No active events'}
             hasError={errors.eventId}
           />
         </div>

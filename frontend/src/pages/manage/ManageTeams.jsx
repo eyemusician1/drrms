@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../../components/ui/Modal';
 import LabsDropdown from '../../components/ui/LabsDropdown';
+import TypeaheadInput from '../../components/ui/TypeaheadInput'; // ➕ NEW: separate file for the typeahead input
 import PhilippinesLocationPicker from '../../components/forms/PhilippinesLocationPicker';
 import Toast from '../../components/ui/Toast';
 import { useRealtimeStream } from '../../hooks/useRealtimeStream';
@@ -357,11 +358,12 @@ const ManageTeams = () => {
         </div>
         <div className="labs-form-group">
           <label>Assigned Event</label>
-          <LabsDropdown
+          {/* replaced LabsDropdown with TypeaheadInput */}
+          <TypeaheadInput
             options={eventOptions}
             value={assignedEventId}
             onChange={(value) => setAssignedEventId(value)}
-            placeholder={eventOptions.length ? 'Select event' : 'No active events'}
+            placeholder={eventOptions.length ? 'Type to search event...' : 'No active events'}
           />
         </div>
         <div className="labs-form-group">
