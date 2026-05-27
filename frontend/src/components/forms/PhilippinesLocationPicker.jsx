@@ -3,6 +3,103 @@ import LabsDropdown from '../ui/LabsDropdown';
 import { geocodePhilippinesPlace } from '../../services/geocode';
 import { NCR_PROVINCE_KEY, NCR_REGION_CODE } from '../../utils/philippinesGeo';
 
+//created a method for 
+const TypeaheadInput = ({ options, value, onChange, placeholder, disabled }) => {
+  const [query, setQuery] = React.useState('');
+  const [open, setOpen] = React.useState(false);
+  const [isFocused, setIsFocused] = React.useState(false);
+  const containerRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const matched = options.find((o) => o.value === value);
+    setQuery(matched ? matched.label : '');
+  }, [value, options]);
+
+  const filtered = React.useMemo(() => {
+    if (!query.trim()) return options.slice(0, 80); 
+    const q = query.toLowerCase();
+    return options.filter((o) => o.label.toLowerCase().includes(q)).slice(0, 80);
+  }, [query, options]);
+
+  // close on outside click
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSelect = (opt) => {
+    setQuery(opt.label);
+    setOpen(false);
+    onChange(opt.value);
+  };
+
+  const handleChange = (e) => {
+    setQuery(e.target.value);
+    setOpen(true);
+    // selected value is cleared when the user clears thei input
+    if (!e.target.value) onChange('');
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <input
+        type="text"
+        className="labs-input"
+        placeholder={placeholder}
+        value={query}
+        disabled={disabled}
+        onChange={handleChange}
+        onFocus={() => { setOpen(true); setIsFocused(true); }}
+        onBlur={() => setIsFocused(false)}
+        autoComplete="off"
+      />
+      {open && !disabled && filtered.length > 0 && (
+        <ul style={{
+          position: 'absolute',
+          zIndex: 999,
+          top: 'calc(100% + 4px)',
+          left: 0,
+          right: 0,
+          margin: 0,
+          padding: '4px 0',
+          listStyle: 'none',
+          background: '#1e1e1e',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '10px',
+          maxHeight: '220px',
+          overflowY: 'auto',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+        }}>
+          {filtered.map((opt) => (
+            <li
+              key={opt.value}
+              onMouseDown={() => handleSelect(opt)}
+              style={{
+                padding: '9px 14px',
+                cursor: 'pointer',
+                fontSize: '13px',
+                color: opt.value === value ? '#A8C7FA' : '#E3E3E3',
+                background: opt.value === value ? 'rgba(168,199,250,0.1)' : 'transparent',
+                borderRadius: '6px',
+                margin: '0 6px',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = opt.value === value ? 'rgba(168,199,250,0.1)' : 'transparent'}
+            >
+              {opt.label}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+};
+
 const PSGC_BASE_URL = 'https://psgc.gitlab.io/api';
 
 const fetchCachedJson = async (cacheKey, url) => {
@@ -358,7 +455,8 @@ const PhilippinesLocationPicker = ({
       <div className="labs-form-grid">
         <div className="labs-form-group">
           <label>Province</label>
-          <LabsDropdown
+          {/* replaced LabsDropdown with TypeaheadInput */}
+          <TypeaheadInput
             options={provinceOptions}
             value={provinceCode}
             onChange={(next) => setProvinceCode(next)}
@@ -369,10 +467,11 @@ const PhilippinesLocationPicker = ({
         </div>
         <div className="labs-form-group">
           <label>City / Municipality</label>
-          <LabsDropdown
+          <TypeaheadInput
             options={cityMunicipalityOptions}
             value={cityMunicipalityCode ? `${cityMunicipalityType}:${cityMunicipalityCode}` : ''}
             onChange={(next) => {
+              if (!next) { setCityMunicipalityType(''); setCityMunicipalityCode(''); return; }
               const [type, code] = next.split(':');
               setCityMunicipalityType(type);
               setCityMunicipalityCode(code);
@@ -386,11 +485,12 @@ const PhilippinesLocationPicker = ({
       {includeBarangay && (
         <div className="labs-form-group">
           <label>Barangay</label>
-          <LabsDropdown
+          <TypeaheadInput
             options={barangayOptions}
             value={barangayCode}
             onChange={(next) => setBarangayCode(next)}
-            placeholder={cityMunicipalityCode ? 'Select barangay' : 'Select city/municipality first'}
+            placeholder={cityMunicipalityCode ? 'Type to search barangay...' : 'Select city/municipality first'}
+            disabled={!cityMunicipalityCode}
           />
         </div>
       )}
