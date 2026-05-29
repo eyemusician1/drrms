@@ -373,10 +373,16 @@ const ManageEvacuation = () => {
                               return;
                             }
                             if (Number.isFinite(Number(shelterLat)) && Number.isFinite(Number(shelterLng))) {
+                              sessionStorage.setItem('drrms:pendingFlyTo', JSON.stringify({
+                                lat: Number(shelterLat),
+                                lng: Number(shelterLng),
+                                label: shelterLabel,
+                              }));
                               window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { lat: Number(shelterLat), lng: Number(shelterLng), label: shelterLabel } }));
                               return;
                             }
                             if (shelterLabel) {
+                              sessionStorage.setItem('drrms:pendingFlyTo', JSON.stringify({ region: shelterLabel }));
                               window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { region: shelterLabel } }));
                               return;
                             }
@@ -466,13 +472,23 @@ const ManageEvacuation = () => {
               type="button"
               className="labs-btn-ghost"
               onClick={() => {
+                const label = locationDetail ? [locationDetail.barangay, locationDetail.city, locationDetail.province].filter(Boolean).join(', ') : location;
                 if (latitude && longitude) {
-                  window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { lat: Number(latitude), lng: Number(longitude), label: location || '' } }));
+                  const payload = { lat: Number(latitude), lng: Number(longitude), label: location || '' };
+                  sessionStorage.setItem('drrms:pendingFlyTo', JSON.stringify(payload));
+                  navigate('/manage/dashboard');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: payload }));
+                  }, 220);
                   return;
                 }
-                const label = locationDetail ? [locationDetail.barangay, locationDetail.city, locationDetail.province].filter(Boolean).join(', ') : location;
                 if (label) {
-                  window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: { region: label } }));
+                  const payload = { region: label };
+                  sessionStorage.setItem('drrms:pendingFlyTo', JSON.stringify(payload));
+                  navigate('/manage/dashboard');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('drrms:flyTo', { detail: payload }));
+                  }, 220);
                   return;
                 }
                 pushToast('No coordinates or location available to locate on map.', 'warning');
