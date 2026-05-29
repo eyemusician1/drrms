@@ -49,6 +49,8 @@ const Dashboard = () => {
   const [highlightFeature, setHighlightFeature] = useState(null);
   const [selectedFeedKey, setSelectedFeedKey] = useState('');
   const [isLocatingFeed, setIsLocatingFeed] = useState(false);
+  const [pendingFlyTo, setPendingFlyTo] = useState(null);
+  const [isMapReady, setIsMapReady] = useState(false);
   const philippinesBounds = PHILIPPINES_BOUNDS;
 
   const totals = reportData?.totals || {};
@@ -117,7 +119,13 @@ const Dashboard = () => {
       const geometry = route?.geometry;
       const duration = route?.duration; // seconds
       const distance = route?.distance; // meters
-      if (!geometry) return null;
+      if (!geometry) {
+        const fallback = buildFallbackRoute(origin, destination);
+        if (fallback) {
+          routeCacheRef.current.set(key, fallback);
+        }
+        return fallback;
+      }
 
       // Line feature
       const lineFeature = {
@@ -146,8 +154,39 @@ const Dashboard = () => {
       routeCacheRef.current.set(key, payload);
       return payload;
     } catch (err) {
-      return null;
+      const fallback = buildFallbackRoute(origin, destination);
+      if (fallback) {
+        routeCacheRef.current.set(key, fallback);
+      }
+      return fallback;
     }
+  };
+
+  const buildFallbackRoute = (origin, destination) => {
+    if (!origin || !destination) return null;
+    const coordinates = [
+      [origin.lng, origin.lat],
+      [destination.lng, destination.lat],
+    ];
+    const distanceKm = haversineDistance(origin, destination);
+    const lineFeature = {
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates },
+      properties: {
+        distance: distanceKm * 1000,
+        duration: null,
+      },
+    };
+    const labelPoint = {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: coordinates[1] },
+      properties: {
+        label: `${distanceKm.toFixed(1)} km`,
+        distance: distanceKm * 1000,
+        duration: null,
+      },
+    };
+    return { lineFeature, labelPoint };
   };
 
   const routeRequestKey = manualRouteRequest
@@ -277,34 +316,58 @@ const Dashboard = () => {
     });
   };
 
+  const handleFlyToDetail = async (detail, { persist = true } = {}) => {
+    if (!detail) return;
+    if (persist) {
+      sessionStorage.setItem('drrms:pendingFlyTo', JSON.stringify(detail));
+    }
+    if (!isMapReady || !mapRef.current) {
+      setPendingFlyTo(detail);
+      return;
+    }
+    try {
+      if (detail.lat != null && detail.lng != null) {
+        flyToCoordinates(
+          {
+            lat: Number(detail.lat),
+            lng: Number(detail.lng),
+            label: detail.label || detail.region || 'Selected',
+          },
+          { zoom: detail.zoom || 13 }
+        );
+        setPendingFlyTo(null);
+        sessionStorage.removeItem('drrms:pendingFlyTo');
+        return;
+      }
+
+      if (detail.region) {
+        const parsed = parseCoordinatesFromText(detail.region);
+        if (parsed) {
+          flyToCoordinates(parsed, { zoom: detail.zoom || 13 });
+          setPendingFlyTo(null);
+          sessionStorage.removeItem('drrms:pendingFlyTo');
+          return;
+        }
+        const parts = parseRegionParts(detail.region);
+        const coords = await geocodePhilippinesPlace(detail.region, parts);
+        if (coords) {
+          flyToCoordinates(coords, { zoom: detail.zoom || 13 });
+          setPendingFlyTo(null);
+          sessionStorage.removeItem('drrms:pendingFlyTo');
+          return;
+        }
+      }
+      pushToast('Could not resolve location for map.', 'warning');
+    } catch (err) {
+      pushToast('Map locate failed.', 'error');
+    }
+  };
+
   // Global handler to allow other components to request the map to fly to a location
   React.useEffect(() => {
     const handler = async (e) => {
       const d = e.detail || {};
-      try {
-        if (d.lat != null && d.lng != null) {
-          flyToCoordinates({ lat: Number(d.lat), lng: Number(d.lng), label: d.label || d.region || 'Selected' }, { zoom: d.zoom || 13 });
-          return;
-        }
-
-        // If a region string is provided, try parse first then geocode as fallback
-        if (d.region) {
-          const parsed = parseCoordinatesFromText(d.region);
-          if (parsed) {
-            flyToCoordinates(parsed, { zoom: d.zoom || 13 });
-            return;
-          }
-          const parts = parseRegionParts(d.region);
-          const coords = await geocodePhilippinesPlace(d.region, parts);
-          if (coords) {
-            flyToCoordinates(coords, { zoom: d.zoom || 13 });
-            return;
-          }
-        }
-        pushToast('Could not resolve location for map.', 'warning');
-      } catch (err) {
-        pushToast('Map locate failed.', 'error');
-      }
+      handleFlyToDetail(d);
     };
     window.addEventListener('drrms:flyTo', handler);
     return () => window.removeEventListener('drrms:flyTo', handler);
@@ -421,6 +484,7 @@ const Dashboard = () => {
 
     map.on('load', () => {
       mapReadyRef.current = true;
+      setIsMapReady(true);
 
       map.addSource('events', {
         type: 'geojson',
@@ -704,6 +768,23 @@ const Dashboard = () => {
     };
   }, []);
 
+  useEffect(() => {
+    const storedFlyTo = sessionStorage.getItem('drrms:pendingFlyTo');
+    if (storedFlyTo) {
+      try {
+        const parsed = JSON.parse(storedFlyTo);
+        setPendingFlyTo(parsed);
+      } catch (err) {
+        sessionStorage.removeItem('drrms:pendingFlyTo');
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!pendingFlyTo || !isMapReady) return;
+    handleFlyToDetail(pendingFlyTo, { persist: false });
+  }, [pendingFlyTo, isMapReady]);
+
   const syncMapSource = (sourceName, features) => {
     const map = mapRef.current;
     if (!map) return;
@@ -848,6 +929,26 @@ useEffect(() => {
       source.setData(featureCollection(features));
     }
   }, [routeFeature, routeLabelFeature]);
+
+  useEffect(() => {
+    if (!manualRouteRequest || !mapReadyRef.current || !mapRef.current) return;
+    const map = mapRef.current;
+    const coords = [];
+    if (routeFeature?.geometry?.coordinates?.length) {
+      coords.push(...routeFeature.geometry.coordinates);
+    } else {
+      const origin = manualRouteRequest.origin;
+      const destination = manualRouteRequest.destination;
+      if (origin) coords.push([origin.lng, origin.lat]);
+      if (destination) coords.push([destination.lng, destination.lat]);
+    }
+    if (!coords.length) return;
+    const bounds = coords.reduce(
+      (acc, point) => acc.extend(point),
+      new maplibregl.LngLatBounds(coords[0], coords[0])
+    );
+    map.fitBounds(bounds, { padding: 80, duration: 900, maxZoom: 13 });
+  }, [manualRouteRequest, routeFeature]);
 
   useEffect(() => {
     if (!mapReadyRef.current || !mapRef.current) return;
